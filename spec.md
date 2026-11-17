@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Versão | 0.5 (17/11/2026: épico 8.2 — textos do rascunho na seção 15; `as_fn_cria_rascunho`, `as_fn_substitui_signatarios`, ordem diferida e rota `/upload`) · 0.4 (17/11/2026: épico 8.1 — canônico da trilha em linhas (11.6), `as_fn_entra_conta` e congelamento refinado (7.5)) · 0.3 (17/11/2026: arquivos no Cloudflare R2, fora do Supabase; 25.3 respondida) · 0.2 (17/11/2026: níveis 1, 2 e 3 com limite de documentos, regra 11.20; armazenamento atrás de uma interface única, seção 18) · 0.1 (17/11/2026: nome Assina, domínio assina.app.br; nome de trabalho anterior "Firma" descartado porque firma.app.br já tinha dono) |
+| Versão | 0.6 (17/11/2026: épico 8.3 — `as_fn_substitui_campos`, textos do editor) · 0.5 (17/11/2026: épico 8.2 — textos do rascunho na seção 15; `as_fn_cria_rascunho`, `as_fn_substitui_signatarios`, ordem diferida e rota `/upload`) · 0.4 (17/11/2026: épico 8.1 — canônico da trilha em linhas (11.6), `as_fn_entra_conta` e congelamento refinado (7.5)) · 0.3 (17/11/2026: arquivos no Cloudflare R2, fora do Supabase; 25.3 respondida) · 0.2 (17/11/2026: níveis 1, 2 e 3 com limite de documentos, regra 11.20; armazenamento atrás de uma interface única, seção 18) · 0.1 (17/11/2026: nome Assina, domínio assina.app.br; nome de trabalho anterior "Firma" descartado porque firma.app.br já tinha dono) |
 | Responsável de produto | Alexandre Siqueira (DabLab) |
 | Status | pronto para revisão |
 | Data | 17/11/2026 |
@@ -501,6 +501,7 @@ as_contas 1 ──── N as_credenciais N ──── 0..1 as_oauth_clientes 
 | `as_fn_cria_rascunho(conta_id, titulo, origem, codigo_verificacao, ator, ip, user_agent)` | função | `as_envelopes`, `as_eventos` | cria o envelope em rascunho e registra o evento `criado` na mesma transação (princípio 1, épico 8.2) |
 | `as_fn_substitui_signatarios(envelope_id, conta_id, lista)` | função | `as_signatarios`, `as_campos` | troca a lista de destinatários de um rascunho (regra 11.2): só da conta (`nao_encontrado`) e só em rascunho (`envelope_congelado`); recusa e-mail repetido (`email_repetido`), mais de 10 assinantes (`assinantes_demais`) ou 5 cópias (`copias_demais`); mantém o id (e os campos) de quem continua pelo e-mail, apaga quem saiu, renumera a ordem pela posição e tira os campos de quem virou cópia |
 | `as_fn_anexa_arquivo(envelope_id, conta_id, caminho, nome, tamanho, paginas, dimensoes)` | função | `as_envelopes`, `as_campos` | troca atômica do arquivo do rascunho (épico 8.2, princípio 2): com o envelope travado, confere conta e rascunho, apaga os campos e aponta para o arquivo novo, que o servidor já validou e gravou num caminho por versão; devolve o caminho anterior (que o servidor apaga) e se havia campos |
+| `as_fn_substitui_campos(envelope_id, conta_id, lista)` | função | `as_campos` | troca todos os campos do rascunho numa transação (épico 8.3): envelope travado, da conta (`nao_encontrado`) e em rascunho (`envelope_congelado`); até 50 por assinante (`campos_demais`); assinatura, rubrica, data e nome sempre obrigatórios; página e assinante conferidos pelo trigger (`campo_invalido`) |
 
 Os erros de negócio sobem com `MESSAGE` igual ao código, e o servidor traduz para a copy da seção 15.
 
@@ -984,6 +985,7 @@ O tom é direto, cordial, sem exclamação e sem jargão jurídico além do nece
 | Configurações | "Prazo para assinar" ("{n} dias") · "Lembrete automático" ("A cada 2 dias", "A cada 3 dias", "A cada 7 dias", "Sem lembrete") |
 | Botões do rascunho | "Próximo: posicionar campos" · "Enviar sem campos" |
 | Editor | "Campos de {nome}" · "Assinatura", "Rubrica", "Data", "Nome", "Texto", "Caixa de seleção" · "Obrigatório" · "Dica para quem preenche" · "Salvar e revisar" |
+| Editor, documento (v0.6) | "Voltar" · "Carregando o documento…" / "Não consegui abrir o documento. Tente de novo." · "Arraste um campo para a página ou toque nele para pôr na página à vista." · "Página {n} de {total}" · "Tentar de novo" · "Setas movem o campo, Shift e setas mudam o tamanho, Delete apaga." (instrução para leitor de tela) |
 | Editor no celular | "Use um computador para posicionar campos." |
 | Revisar | "Revise antes de enviar" · "{nome} não tem campo de assinatura. Ele vai assinar só no manifesto." · "Depois de enviado, o documento não pode ser alterado." · "Enviar para assinatura" |
 | Enviado | "Enviado." |

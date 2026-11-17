@@ -322,6 +322,27 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"as_fn_substitui_campos":
+{ Args: { "p_conta_id": string,"p_envelope_id": string,"p_lista": Json }; Returns: {
+              "altura": number,
+"envelope_id": string,
+"id": string,
+"largura": number,
+"obrigatorio": boolean,
+"pagina": number,
+"rotulo": string | null,
+"signatario_id": string,
+"tipo": Database["public"]['Enums']["as_tipo_campo"],
+"valor": string | null,
+"x": number,
+"y": number
+            }[]
+                          SetofOptions: {
+        from: "*"
+        to: "as_campos"
+        isOneToOne: false
+        isSetofReturn: true
+      } },
 "as_fn_substitui_signatarios":
 { Args: { "p_conta_id": string,"p_envelope_id": string,"p_lista": Json }; Returns: {
               "assinado_em": string | null,

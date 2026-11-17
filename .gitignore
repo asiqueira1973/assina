@@ -11,3 +11,4 @@ supabase/.temp/
 *.tsbuildinfo
 .DS_Store
 .armazenamento-local/
+public/pdf.worker.min.mjs

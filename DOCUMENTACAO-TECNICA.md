@@ -4,7 +4,7 @@ Descreve o sistema **como está implementado**, não como foi planejado (spec.md
 
 | | |
 |---|---|
-| Estado | Épicos 8.0, 8.1 e 8.2 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
+| Estado | Épicos 8.0 a 8.3 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
 | Stack | Next.js 16.4.6 (App Router, Cache Components, `proxy.ts`), React 19.3, TypeScript, Supabase Postgres (projeto compartilhado, prefixo `as_`), Vitest, pgTAP |
 
 ---
@@ -76,11 +76,12 @@ Fonte: `supabase/migrations/20261117130100_as_logica.sql`. Toda função com `se
 | `as_fn_cria_rascunho` | função | `as_envelopes`, `as_eventos` | criar envelope (painel, API, MCP) | cria o rascunho e o evento `criado` na mesma transação |
 | `as_fn_substitui_signatarios` | função | `as_signatarios`, `as_campos` | salvar a lista de destinatários | troca a lista de um rascunho da conta: recusa e-mail repetido e limites (10 assinantes, 5 cópias); mantém quem continua (e os campos), apaga quem saiu, renumera a ordem pela posição, tira os campos de quem virou cópia |
 | `as_fn_anexa_arquivo` | função | `as_envelopes`, `as_campos` | depois de validar um PDF | com o envelope travado e ainda em rascunho, apaga os campos e aponta para o arquivo novo (caminho por versão); devolve o caminho anterior para o servidor apagar |
+| `as_fn_substitui_campos` | função | `as_campos` | salvar o editor de campos | troca todos os campos do rascunho numa transação; até 50 por assinante; assinatura, rubrica, data e nome sempre obrigatórios |
 | `as_fn_entra_conta` | função | `as_contas`, `as_credenciais` | login | cria a conta já com a chave de API, na mesma transação; conta existente atualiza só o e-mail; suspensa não é tocada |
 
-Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `envelope_congelado`, `envelope_em_andamento`, `status_mudou`, `campo_invalido`, `nao_encontrado`, `email_repetido`, `assinantes_demais`, `copias_demais`).
+Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `envelope_congelado`, `envelope_em_andamento`, `status_mudou`, `campo_invalido`, `campos_demais`, `nao_encontrado`, `email_repetido`, `assinantes_demais`, `copias_demais`).
 
-## 4. Mapa tela → tabelas (até o 8.2)
+## 4. Mapa tela → tabelas (até o 8.3)
 
 | Tela / rota | Lê | Escreve | Passa por |
 |---|---|---|---|
@@ -99,6 +100,8 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | `/painel/envelopes/{id}/editar` | `as_envelopes`, `as_signatarios` | via PATCH e PUT | `getCurrentAccount` |
 | `PATCH /api/painel/envelopes/{id}` | `as_envelopes` | `as_envelopes` (título, mensagem, ordem, prazo, lembrete) | `requireConta` |
 | `PUT /api/painel/envelopes/{id}/signatarios` | — | `as_signatarios`, `as_campos` | `requireConta`, `as_fn_substitui_signatarios` |
+| `/painel/envelopes/{id}/campos` | `as_envelopes`, `as_signatarios` (assinantes), `as_campos`, URL assinada do original | via PUT | `getCurrentAccount` |
+| `PUT /api/painel/envelopes/{id}/campos` | — | `as_campos` | `requireConta`, `as_fn_substitui_campos` |
 | `PUT/GET /api/dev/arquivos/{caminho}` (só dev) | arquivo local | arquivo local | HMAC + validade; 404 em produção ou com R2 |
 
 ## 5. Lógica por tela
@@ -109,6 +112,7 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 
 - **Novo envelope:** escolher o PDF cria o rascunho (`POST /api/painel/envelopes`, título do nome do arquivo), sobe direto para o armazenamento pela URL assinada (progresso por XHR) e pede a validação. O servidor lê `upload.pdf` numa leitura só, limitada a 10 MB (no R2, com `Range`), apaga o upload, valida a regra 11.1 (`%PDF-`, 10 MB, senha, 1–100 páginas, página ≤ 1.440 pt) e grava **os mesmos bytes que validou** em `original-{versao}.pdf`; `as_fn_anexa_arquivo` aponta o envelope para ele numa transação e o original anterior é apagado. Arquivo inválido: nada muda e a tela mostra a frase da seção 15. Troca válida apaga os campos e avisa. PDF já assinado digitalmente passa, com aviso.
 - **Editar rascunho:** o estado da tela é o que a pessoa digita; cada mudança é gravada com debounce de 800 ms (PATCH das configurações, PUT da lista inteira). A lista só é enviada se estiver válida (nome, e-mail, sem repetido). "Rascunho salvo." só depois da resposta do servidor; falha mostra "Não consegui salvar. Tente de novo." Os botões de avançar só liberam com arquivo, título e ao menos um assinante **salvo**, sem gravação pendente nem erro.
+- **Editor de campos:** o servidor manda as dimensões das páginas, os assinantes, os campos e uma URL assinada de 5 min do original (ver no editor não registra `baixou_original`). O pdf.js (worker em `/pdf.worker.min.mjs`, copiado por `scripts/copy-pdf-worker.mjs` no `predev`/`prebuild`) desenha cada página quando ela chega perto da tela, na largura da coluna. Cada página tem a proporção real (`aspect-ratio`) e os campos ficam por cima em porcentagem, por isso o lugar relativo não muda com a largura. Campo novo: arrastar o tipo para a página (cai onde soltou) ou clicar (cai no centro da página que cruza o meio da tela), com o tamanho padrão da regra 11.3 ajustado à página (`defaultFieldSize`). Mover e redimensionar com o ponteiro, setas (1%), Shift + setas, Delete. Tudo passa por `clampField` (nunca fora da página). Salvamento automático em fila (`use-debounced-save.ts`, o mesmo do rascunho); "Salvar e revisar" grava na hora e só avança se o servidor confirmou. Abaixo de 768 px só aparece o aviso de usar um computador.
 - **Armazenamento:** `src/server/files/storage.ts` escolhe o driver. `r2` com as variáveis `R2_*`; `local` (disco em `.armazenamento-local/`, URLs com HMAC servidas por `/api/dev/arquivos`) só fora de produção; em produção sem R2 o app falha.
 
 ## 6. Divergências em relação ao spec
@@ -127,4 +131,5 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | 10 | Upload em duas etapas (`upload.pdf` → `original-{versao}.pdf`, gravando os bytes validados), troca atômica por `as_fn_anexa_arquivo` e rota extra `POST /api/painel/envelopes/{id}/upload` (spec v0.5) | Validar antes de substituir; o arquivo gravado é exatamente o validado (a URL de upload vale 2 h); um envio concorrente nunca vê arquivo pela metade |
 | 11 | Driver local de arquivos e rota `/api/dev/arquivos` (só dev) | O bucket R2 ainda não existe (P2); a interface única permite trocar sem tocar no domínio |
 | 12 | Ordem dos assinantes como exclusion constraint diferida, e não índice único parcial (spec v0.5) | Reordenar dentro de uma transação colidia no índice |
-| 13 | Migrations ainda não aplicadas no remoto | O hook `guard-production.sh` da sessão em que o épico foi feito (pasta do agenda-psi) bloqueou o `apply_migration`; aguardando o Alexandre |
+| 13 | Clicar num tipo da paleta também cria o campo (além de arrastar) | Caminho do teclado e do toque; arrastar e soltar nativo não existe no toque |
+| 14 | Migrations ainda não aplicadas no remoto | O hook `guard-production.sh` da sessão em que o épico foi feito (pasta do agenda-psi) bloqueou o `apply_migration`; aguardando o Alexandre |

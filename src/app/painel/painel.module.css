@@ -54,3 +54,6 @@
 }
 .emptyText { margin: 0; font-size: 17px; color: var(--text-secondary); }
 .emptyAction { display: inline-flex; align-items: center; min-height: var(--tap); font-size: 16px; font-weight: 600; }
+
+/* Telas que precisam da largura toda (editor de campos, épico 8.3) marcam um filho com data-wide. */
+.content:has([data-wide]) { max-width: none; }

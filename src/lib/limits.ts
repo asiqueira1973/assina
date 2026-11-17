@@ -44,3 +44,12 @@ export const DOWNLOAD_URL_SEGUNDOS = 5 * 60;
 
 // Épico 8.2: salvamento automático do rascunho.
 export const AUTOSAVE_MS = 800;
+
+// Regra 11.3: campos.
+export const MAX_CAMPOS_POR_ASSINANTE = 50;
+// Página A4 em pontos: base dos tamanhos padrão dos campos.
+export const A4_PT = { l: 595.28, a: 841.89 } as const;
+// Menor campo possível, em fração da página (abaixo disso não se clica nem se lê).
+export const CAMPO_MIN = 0.01;
+// Passo do teclado no editor (critério 8.3: setas movem 1%).
+export const PASSO_TECLADO = 0.01;

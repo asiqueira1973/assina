@@ -9,7 +9,7 @@ Se um teste falhar, corrija o código, não o teste; nunca pule nem apague teste
 Bug: teste que reproduz → ver falhar → commit → `touch .claude/fix-mode` → corrigir → `rm .claude/fix-mode`.
 
 ## Estado
-Épicos 8.0, 8.1 e 8.2 (rascunho, upload e validação do PDF) concluídos. Migrations aplicadas só no **local**; pendências do Alexandre em `PENDENCIAS.md`. Próximo: 8.3 (editor de campos).
+Épicos 8.0 a 8.3 (rascunho, upload, validação do PDF e editor de campos) concluídos. Migrations aplicadas só no **local**; pendências do Alexandre em `PENDENCIAS.md`. Próximo: 8.4 (revisar e enviar).
 
 ## Convenções (seção 18)
 - Banco em português `snake_case`, **sempre com prefixo `as_`** (projeto Supabase compartilhado `jeesdmfcrmhyufwzwzwt`). Código, variáveis e arquivos em inglês; fronteira em `src/server/db/`.
@@ -34,5 +34,7 @@ Bug: teste que reproduz → ver falhar → commit → `touch .claude/fix-mode` �
 - O console do navegador guarda erros antigos entre recargas na mesma aba: para conferir se um erro sumiu, abra uma aba nova.
 - Docker dividido com outros Supabase locais (otcb, Reunião): se o Postgres travar ou der `57014`, pare os outros.
 - Testes de rota usam o banco local real: cada teste cria a própria conta e apaga no `afterAll`; nunca apague "tudo". No pgTAP também: toda consulta filtra pelo id ou código da fixture (o banco local tem dados de teste manual; um `where email = …` solto pega linha de outro envelope e quebra o plano).
+- O Next 16 mantém a página anterior escondida no DOM: em teste no navegador, `querySelector` pode achar a cópia invisível (largura 0). Filtre pelo elemento visível.
+- O worker do pdf.js vai para `public/` pelo `predev`/`prebuild` (não versionado, fora do ESLint). Rodar `next dev` direto, sem `npm run`, deixa o editor sem worker.
 - `next typegen` gera `PageProps`/`LayoutProps`: rode `npm run typecheck`, não `tsc` direto.
 - Quando o agente errar a mesma coisa duas vezes, a correção entra aqui.

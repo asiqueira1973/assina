@@ -1,0 +1,114 @@
+/* Editor de campos (épico 8.3, seção 16): três colunas — assinantes e paleta, páginas do PDF
+   e propriedades do campo selecionado. Abaixo de 768 px, só o aviso de usar um computador. */
+.editor {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 220px;
+  gap: 24px;
+  align-items: start;
+}
+.left, .right { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 12px; }
+.title { margin: 0 0 4px; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+
+.signerList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.signerButton {
+  width: 100%;
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: var(--text);
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+.signerButton:hover { background: var(--surface); }
+.signerActive, .signerActive:hover { background: var(--surface); font-weight: 600; }
+.dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+.signerName { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.count { font-size: 13px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+.paletteTitle { margin: 8px 0 0; font-size: 14px; font-weight: 700; color: var(--text-secondary); }
+.palette { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.paletteItem {
+  min-height: var(--tap);
+  padding: 6px 8px;
+  border: 1.5px dashed;
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  cursor: grab;
+}
+.paletteItem:disabled { opacity: 0.4; cursor: default; }
+.howTo { margin: 0; font-size: 13px; color: var(--text-secondary); line-height: 1.4; }
+
+.pages { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: var(--radius-row); background: var(--surface); }
+.pageBlock { margin: 0; }
+.page { position: relative; width: 100%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); touch-action: none; }
+.canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.loading { position: absolute; inset: 0; display: grid; place-items: center; color: #6e6e73; font-size: 14px; }
+.pageNumber { margin: 6px 0 12px; text-align: center; font-size: 12px; color: var(--text-secondary); }
+.error { margin: 0; padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--red); }
+
+.field {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px dashed;
+  border-radius: 4px;
+  cursor: move;
+  touch-action: none;
+  overflow: visible;
+  user-select: none;
+}
+.field:focus-visible, .fieldSelected { border-style: solid; outline: 2px solid var(--accent); outline-offset: 1px; z-index: 2; }
+.fieldLabel { font-size: 11px; font-weight: 600; color: #1d1d1f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; pointer-events: none; }
+.handle { position: absolute; right: -7px; bottom: -7px; width: 14px; height: 14px; border: 2px solid #fff; border-radius: 50%; cursor: nwse-resize; touch-action: none; }
+
+.props { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: var(--radius-row); background: var(--surface); }
+.propsTitle { margin: 0; font-size: 16px; font-weight: 700; }
+.propsSigner { margin: -6px 0 0; font-size: 14px; color: var(--text-secondary); }
+.toggle { display: flex; align-items: center; gap: 8px; min-height: var(--tap); font-size: 15px; cursor: pointer; }
+.toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
+.propField { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.propField input { min-height: var(--tap); padding: 8px 10px; border: 1px solid var(--hairline); border-radius: 10px; background: var(--bg); color: var(--text); font: inherit; font-size: 15px; }
+.removeButton { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--tap); border: 1px solid var(--hairline); border-radius: 999px; background: var(--bg); color: var(--red); font-size: 15px; font-weight: 600; cursor: pointer; }
+
+.footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  padding: 16px 0;
+  border-top: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(12px);
+  z-index: 5;
+}
+.saveStatus { margin-right: auto; font-size: 14px; color: var(--text-secondary); }
+.saveError { color: var(--red); }
+.secondaryLink { display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 18px; border: 1px solid var(--hairline); border-radius: 999px; color: var(--text); font-size: 16px; font-weight: 600; }
+.primaryButton, .primaryLink { display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 20px; border: 0; border-radius: 999px; background: var(--accent); color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; }
+.primaryButton:disabled { opacity: 0.5; cursor: default; }
+.notice { margin: 12px 0 16px; padding: 12px 14px; border-radius: 12px; background: var(--accent-soft); color: var(--text); font-size: 15px; }
+
+.mobileOnly { display: none; }
+
+@media (max-width: 1200px) {
+  .editor { grid-template-columns: 200px minmax(0, 1fr); }
+  .right { grid-column: 1 / 2; grid-row: 2; }
+}
+@media (max-width: 767px) {
+  .editor, .footer { display: none; }
+  .mobileOnly { display: block; }
+}
+.error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.retryButton { min-height: var(--tap); padding: 0 16px; border: 1px solid currentColor; border-radius: 999px; background: none; color: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }

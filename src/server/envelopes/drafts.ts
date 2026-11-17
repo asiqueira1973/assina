@@ -31,7 +31,18 @@ type Actor = Database["public"]["Enums"]["as_ator"];
 
 /** Erro de negócio com código estável (vira { codigo } na resposta HTTP). */
 export class DraftError extends Error {
-  constructor(public code: "nao_encontrado" | "envelope_congelado" | "arquivo_ausente" | "email_repetido" | "assinantes_demais" | "copias_demais" | PdfErrorCode) {
+  constructor(
+    public code:
+      | "nao_encontrado"
+      | "envelope_congelado"
+      | "arquivo_ausente"
+      | "email_repetido"
+      | "assinantes_demais"
+      | "copias_demais"
+      | "campos_demais"
+      | "campo_invalido"
+      | PdfErrorCode,
+  ) {
     super(code);
   }
 }

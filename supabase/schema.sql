@@ -581,6 +581,81 @@ $$;
 ALTER FUNCTION "public"."as_fn_registra_evento"("p_envelope_id" "uuid", "p_tipo" "public"."as_tipo_evento", "p_ator" "public"."as_ator", "p_signatario_id" "uuid", "p_ip" "inet", "p_user_agent" "text", "p_dados" "jsonb") OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."as_campos" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "envelope_id" "uuid" NOT NULL,
+    "signatario_id" "uuid" NOT NULL,
+    "tipo" "public"."as_tipo_campo" NOT NULL,
+    "pagina" smallint NOT NULL,
+    "x" numeric(6,5) NOT NULL,
+    "y" numeric(6,5) NOT NULL,
+    "largura" numeric(6,5) NOT NULL,
+    "altura" numeric(6,5) NOT NULL,
+    "obrigatorio" boolean DEFAULT true NOT NULL,
+    "rotulo" "text",
+    "valor" "text",
+    CONSTRAINT "as_campos_altura_check" CHECK (("altura" > (0)::numeric)),
+    CONSTRAINT "as_campos_dentro_ck" CHECK (((("x" + "largura") <= (1)::numeric) AND (("y" + "altura") <= (1)::numeric))),
+    CONSTRAINT "as_campos_largura_check" CHECK (("largura" > (0)::numeric)),
+    CONSTRAINT "as_campos_obrigatorio_ck" CHECK (("obrigatorio" OR ("tipo" = ANY (ARRAY['texto'::"public"."as_tipo_campo", 'caixa'::"public"."as_tipo_campo"])))),
+    CONSTRAINT "as_campos_pagina_check" CHECK (("pagina" >= 1)),
+    CONSTRAINT "as_campos_rotulo_check" CHECK ((("rotulo" IS NULL) OR ("char_length"("rotulo") <= 60))),
+    CONSTRAINT "as_campos_valor_check" CHECK ((("valor" IS NULL) OR ("char_length"("valor") <= 200))),
+    CONSTRAINT "as_campos_x_check" CHECK ((("x" >= (0)::numeric) AND ("x" <= (1)::numeric))),
+    CONSTRAINT "as_campos_y_check" CHECK ((("y" >= (0)::numeric) AND ("y" <= (1)::numeric)))
+);
+
+
+ALTER TABLE "public"."as_campos" OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."as_fn_substitui_campos"("p_envelope_id" "uuid", "p_conta_id" "uuid", "p_lista" "jsonb") RETURNS SETOF "public"."as_campos"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  v_status public.as_status_envelope;
+begin
+  select status into v_status from public.as_envelopes where id = p_envelope_id and conta_id = p_conta_id for update;
+  if v_status is null then
+    raise exception 'nao_encontrado';
+  end if;
+  if v_status <> 'rascunho' then
+    raise exception 'envelope_congelado';
+  end if;
+
+  if exists (
+    select 1 from jsonb_array_elements(coalesce(p_lista, '[]'::jsonb)) c
+     group by c ->> 'signatario_id' having count(*) > 50
+  ) then
+    raise exception 'campos_demais';
+  end if;
+
+  delete from public.as_campos where envelope_id = p_envelope_id;
+
+  insert into public.as_campos (envelope_id, signatario_id, tipo, pagina, x, y, largura, altura, obrigatorio, rotulo)
+  select
+    p_envelope_id,
+    (c ->> 'signatario_id')::uuid,
+    (c ->> 'tipo')::public.as_tipo_campo,
+    (c ->> 'pagina')::smallint,
+    (c ->> 'x')::numeric(6,5),
+    (c ->> 'y')::numeric(6,5),
+    (c ->> 'largura')::numeric(6,5),
+    (c ->> 'altura')::numeric(6,5),
+    case when c ->> 'tipo' in ('texto', 'caixa') then coalesce((c ->> 'obrigatorio')::boolean, true) else true end,
+    -- Rótulo (dica) só existe em texto e caixa (7.3).
+    case when c ->> 'tipo' in ('texto', 'caixa') then nullif(trim(c ->> 'rotulo'), '') end
+  from jsonb_array_elements(coalesce(p_lista, '[]'::jsonb)) c;
+
+  return query select * from public.as_campos where envelope_id = p_envelope_id order by pagina, y, x;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."as_fn_substitui_campos"("p_envelope_id" "uuid", "p_conta_id" "uuid", "p_lista" "jsonb") OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."as_signatarios" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "envelope_id" "uuid" NOT NULL,
@@ -782,34 +857,6 @@ $$;
 
 
 ALTER FUNCTION "public"."as_fn_verifica_trilha"("p_envelope_id" "uuid") OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."as_campos" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "envelope_id" "uuid" NOT NULL,
-    "signatario_id" "uuid" NOT NULL,
-    "tipo" "public"."as_tipo_campo" NOT NULL,
-    "pagina" smallint NOT NULL,
-    "x" numeric(6,5) NOT NULL,
-    "y" numeric(6,5) NOT NULL,
-    "largura" numeric(6,5) NOT NULL,
-    "altura" numeric(6,5) NOT NULL,
-    "obrigatorio" boolean DEFAULT true NOT NULL,
-    "rotulo" "text",
-    "valor" "text",
-    CONSTRAINT "as_campos_altura_check" CHECK (("altura" > (0)::numeric)),
-    CONSTRAINT "as_campos_dentro_ck" CHECK (((("x" + "largura") <= (1)::numeric) AND (("y" + "altura") <= (1)::numeric))),
-    CONSTRAINT "as_campos_largura_check" CHECK (("largura" > (0)::numeric)),
-    CONSTRAINT "as_campos_obrigatorio_ck" CHECK (("obrigatorio" OR ("tipo" = ANY (ARRAY['texto'::"public"."as_tipo_campo", 'caixa'::"public"."as_tipo_campo"])))),
-    CONSTRAINT "as_campos_pagina_check" CHECK (("pagina" >= 1)),
-    CONSTRAINT "as_campos_rotulo_check" CHECK ((("rotulo" IS NULL) OR ("char_length"("rotulo") <= 60))),
-    CONSTRAINT "as_campos_valor_check" CHECK ((("valor" IS NULL) OR ("char_length"("valor") <= 200))),
-    CONSTRAINT "as_campos_x_check" CHECK ((("x" >= (0)::numeric) AND ("x" <= (1)::numeric))),
-    CONSTRAINT "as_campos_y_check" CHECK ((("y" >= (0)::numeric) AND ("y" <= (1)::numeric)))
-);
-
-
-ALTER TABLE "public"."as_campos" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."as_contas" (
@@ -1310,6 +1357,15 @@ GRANT ALL ON FUNCTION "public"."as_fn_registra_evento"("p_envelope_id" "uuid", "
 
 
 
+GRANT ALL ON TABLE "public"."as_campos" TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."as_fn_substitui_campos"("p_envelope_id" "uuid", "p_conta_id" "uuid", "p_lista" "jsonb") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_substitui_campos"("p_envelope_id" "uuid", "p_conta_id" "uuid", "p_lista" "jsonb") TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."as_signatarios" TO "service_role";
 
 
@@ -1331,10 +1387,6 @@ GRANT ALL ON FUNCTION "public"."as_fn_valida_campo"() TO "service_role";
 
 REVOKE ALL ON FUNCTION "public"."as_fn_verifica_trilha"("p_envelope_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."as_fn_verifica_trilha"("p_envelope_id" "uuid") TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."as_campos" TO "service_role";
 
 
 

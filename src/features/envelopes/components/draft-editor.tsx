@@ -5,11 +5,10 @@
 // servidor: os botões de avançar só liberam quando a última gravação foi confirmada e há ao menos
 // um assinante salvo. Nunca mostra "salvo" se a gravação falhou.
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, FileText, GripVertical, Plus, X } from "lucide-react";
 import { copy } from "@/lib/copy";
 import {
-  AUTOSAVE_MS,
   LEMBRETES_PERMITIDOS,
   MAX_ASSINANTES,
   MAX_COPIAS,
@@ -21,13 +20,13 @@ import {
   TITULO_MAX,
 } from "@/lib/limits";
 import { Dropzone } from "./dropzone";
+import { useDebouncedSave, type SaveState } from "../use-debounced-save";
 import styles from "./draft.module.css";
 import panel from "@/app/painel/painel.module.css";
 
 type Settings = { titulo: string; mensagem: string; em_ordem: boolean; prazo_dias: number; lembrete_cada_dias: number | null };
 type Signer = { key: string; nome: string; email: string; papel: "assinar" | "copia"; exigir_cpf: boolean };
 type FileInfo = { nome: string; paginas: number; tamanho: number };
-type SaveState = "idle" | "saving" | "saved" | "error";
 
 type Props = {
   envelopeId: string;
@@ -64,40 +63,6 @@ function signerErrors(list: Signer[]): Record<string, string> {
     seen.set(email, s.key);
   }
   return errors;
-}
-
-// Grava com debounce e em fila: as gravações saem uma depois da outra, na ordem em que foram
-// pedidas, então uma resposta lenta nunca deixa no servidor um valor mais antigo que o último
-// (achado do verifier no 8.2). Devolve: agendar, desmarcar ("o que está na tela ainda não foi
-// salvo") e o estado da última gravação pedida.
-function useDebouncedSave<T>(save: (value: T) => Promise<boolean>) {
-  const [state, setState] = useState<SaveState>("idle");
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const generation = useRef(0);
-  const queue = useRef<Promise<unknown>>(Promise.resolve());
-  const schedule = useCallback(
-    (value: T) => {
-      if (timer.current) clearTimeout(timer.current);
-      const mine = ++generation.current;
-      setState("saving");
-      timer.current = setTimeout(() => {
-        queue.current = queue.current.then(async () => {
-          // Se outra gravação foi pedida depois desta, esta nem sai: a mais nova vale.
-          if (mine !== generation.current) return;
-          const ok = await save(value).catch(() => false);
-          if (mine === generation.current) setState(ok ? "saved" : "error");
-        });
-      }, AUTOSAVE_MS);
-    },
-    [save],
-  );
-  // A tela mudou para algo que não pode ser gravado: cancela o pendente e tira o "salvo".
-  const invalidate = useCallback(() => {
-    if (timer.current) clearTimeout(timer.current);
-    generation.current++;
-    setState("idle");
-  }, []);
-  return { state, schedule, invalidate };
 }
 
 export function DraftEditor({ envelopeId, initialSettings, initialFile, initialSigners, alreadySigned }: Props) {
