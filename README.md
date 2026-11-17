@@ -74,6 +74,20 @@ O Assina pede só `openid email profile`: escopos não sensíveis, sem verifica�
 3. **R2 → Gerenciar tokens de API → Criar token**: permissão **Leitura e gravação de objetos**, restrito ao bucket `assina-documentos`.
 4. Copie para `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` e `R2_BUCKET`.
 
+## Selo do PDF final (épico 8.6)
+
+O PDF final leva um selo PAdES da plataforma (regra 11.10). O selo só garante a integridade do arquivo; não é a assinatura de quem assinou.
+
+1. **Certificado.** Para dev (e para o MVP, até a decisão 25.2): `npm run selo:gerar`. O comando imprime `SELO_P12_BASE64=…` e `SELO_P12_SENHA=…` e não grava nenhum arquivo. Cole as duas linhas no `.env.local`, ou, em produção, nas variáveis da Vercel. Com o certificado autoassinado, o Adobe Reader mostra "identidade desconhecida", o que é esperado.
+2. **Carimbo do tempo (opcional).** `SELO_TSA_URL` com uma TSA RFC 3161 gratuita. Em 17/11/2026 responderam em cerca de 0,5 s: `http://timestamp.digicert.com`, `https://freetsa.org/tsr` e `http://timestamp.sectigo.com`. Com resposta em até 5 s, o selo é `B-T`; sem resposta, `B-B`, e o envelope conclui do mesmo jeito.
+3. **Alerta.** `ADMIN_EMAIL` recebe o "[Assina] Finalização falhou 3 vezes".
+4. **Conferir um PDF selado.** Basta abrir no Adobe Reader. Pela linha de comando:
+
+   ```bash
+   python3 -c "import re,sys;b=open(sys.argv[1],'rb').read();a,l,c,d=map(int,list(re.finditer(rb'/ByteRange\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)',b))[-1].groups());open('c.bin','wb').write(b[a:a+l]+b[c:c+d]);open('s.der','wb').write(bytes.fromhex(b[a+l+1:c-1].decode()))" final.pdf
+   openssl cms -verify -binary -inform DER -in s.der -content c.bin -noverify -purpose any -out /dev/null
+   ```
+
 ## Licença
 
 MIT. Referência funcional: [SignuDoc](https://github.com/NYLLON-SOFTWARE/signudoc) (MIT); todo código adaptado dele leva atribuição em `THIRD_PARTY_NOTICES.md`.

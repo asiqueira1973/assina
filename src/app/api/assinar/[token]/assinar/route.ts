@@ -8,6 +8,10 @@ import { SignInput, sign } from "@/server/signing/actions";
 import { requireSignatarioPorToken } from "@/server/signing/context";
 import { noSession, signerErrorResponse } from "@/server/signing/http";
 
+// Critério 8.6: a última assinatura dispara a finalização depois da resposta (after), que pode
+// levar alguns segundos (PDF de 100 páginas, TSA de até 5 s).
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest, ctx: RouteContext<"/api/assinar/[token]/assinar">) {
   const signer = await requireSignatarioPorToken(req, (await ctx.params).token);
   if (signer instanceof Response) return signer;

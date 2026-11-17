@@ -11,3 +11,10 @@ export function formatDateLong(iso: string | Date): string {
 export function formatDateTime(iso: string | Date): string {
   return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: TZ }).format(new Date(iso));
 }
+
+// "17/12/2026 14:05:09" no horário de Brasília, com segundos (manifesto e trilha, regra 11.9).
+export function formatDateTimeSeconds(iso: string | Date): string {
+  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: TZ })
+    .format(new Date(iso))
+    .replace(",", "");
+}

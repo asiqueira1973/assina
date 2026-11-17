@@ -77,3 +77,35 @@ export function declinedRecipientEmail(p: { titulo: string }): RenderedEmail {
     text: [subject, "", copy.emailNotices.declinedRecipient.body, "", copy.email.footer].join("\n"),
   };
 }
+
+// Conclusão (seção 15.2, tipos concluido_destinatario e concluido_remetente): PDF anexo ou o botão
+// "Baixar documento assinado", o código de verificação e o SHA-256 final. Para o remetente, o
+// botão leva ao detalhe do envelope.
+export function completedEmail(p: { titulo: string; codigo: string; hashFinal: string; site: string; anexo: boolean; link: string | null; detail: boolean }): RenderedEmail {
+  const c = copy.emailNotices.completed;
+  const subject = c.subject(p.titulo);
+  const title = c.title(p.titulo);
+  const lines = [
+    ...(p.anexo ? [c.attached] : []),
+    `${c.code}: ${p.codigo}`,
+    `${c.hash}: ${p.hashFinal}`,
+    c.verify(p.site),
+  ];
+  const button = p.link ? { label: p.detail ? c.detail : c.download, url: p.link } : undefined;
+  return {
+    subject,
+    html: layout(title, lines.map((l) => esc(l).replace(/: ([0-9a-f]{64})$/, ': <span style="font-family:ui-monospace,Menlo,monospace;font-size:13px;word-break:break-all">$1</span>')), button),
+    text: [title, "", ...lines, ...(button ? ["", `${button.label}: ${button.url}`] : []), "", copy.email.footer].join("\n"),
+  };
+}
+
+// Alerta ao admin (seção 15.2, tipo finalizacao_falhou_admin): id e erro técnico, sem dado pessoal.
+export function finalizationFailedEmail(p: { envelopeId: string; erro: string }): RenderedEmail {
+  const subject = copy.emailNotices.finalizationFailed.subject;
+  const body = copy.emailNotices.finalizationFailed.body(p.envelopeId, p.erro);
+  return {
+    subject,
+    html: layout(subject, body.split("\n").map(esc)),
+    text: [subject, "", body].join("\n"),
+  };
+}

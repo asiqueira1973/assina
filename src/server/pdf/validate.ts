@@ -41,11 +41,20 @@ export async function validatePdf(bytes: Uint8Array): Promise<PdfCheck> {
   if (pages.length < MIN_PAGINAS) return { ok: false, code: "nao_e_pdf" };
   if (pages.length > MAX_PAGINAS) return { ok: false, code: "paginas_demais" };
 
+  // Tamanho da página como o pdf.js a mostra (CropBox, já girado pelo /Rotate): é nessa caixa que
+  // o editor põe os campos em fração (regra 11.3), e a gravação no 8.6 desfaz a mesma conta.
   const dimensions = pages.map((p) => {
-    const { width, height } = p.getSize();
-    return { l: Math.round(width * 100) / 100, a: Math.round(height * 100) / 100 };
+    const { width, height } = p.getCropBox();
+    const turned = (((p.getRotation().angle % 360) + 360) % 360) % 180 === 90;
+    const [l, a] = turned ? [height, width] : [width, height];
+    return { l: Math.round(l * 100) / 100, a: Math.round(a * 100) / 100 };
   });
-  if (dimensions.some((d) => d.l > MAX_LADO_PAGINA_PT || d.a > MAX_LADO_PAGINA_PT)) return { ok: false, code: "pagina_grande_demais" };
+  // O limite vale para a área visível e para o MediaBox (um MediaBox enorme com CropBox pequeno
+  // ainda é uma página enorme para gravar e guardar).
+  const media = pages.map((p) => p.getSize());
+  if (dimensions.some((d) => d.l > MAX_LADO_PAGINA_PT || d.a > MAX_LADO_PAGINA_PT) || media.some((d) => d.width > MAX_LADO_PAGINA_PT || d.height > MAX_LADO_PAGINA_PT)) {
+    return { ok: false, code: "pagina_grande_demais" };
+  }
 
   return { ok: true, pages: pages.length, dimensions, alreadySigned: containsAscii(bytes, "/ByteRange") };
 }

@@ -27,6 +27,8 @@ import { errorCode } from "@/server/error-code";
 import { codeEmail } from "@/server/email/templates";
 import type { RequestMeta } from "@/server/envelopes/drafts";
 import { storage } from "@/server/files/storage";
+import { finalizeEnvelope } from "@/server/envelopes/finalize";
+import { runAfterResponse } from "@/server/http";
 import { sendInvite } from "@/server/notifications/invites";
 import { sendNotice } from "@/server/notifications/notices";
 import type { SignerContext } from "./context";
@@ -203,6 +205,9 @@ export async function sign(ctx: SignerContext, input: z.infer<typeof SignInput>,
     if (result.proximo_id) await sendInvite(result.proximo_id);
   });
   await afterCommit(() => sendNotice(`assinou_remetente:${ctx.signer.id}`));
+  // Último assinante: o envelope entrou em finalizando. A finalização roda depois da resposta e
+  // nunca lança (a falha fica no banco e a faxina retenta).
+  if (result.envelope_status === "finalizando") await runAfterResponse(() => finalizeEnvelope(ctx.envelope.id));
   return result.envelope_status;
 }
 

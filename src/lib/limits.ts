@@ -88,3 +88,10 @@ export const MOTIVO_ENTRADA_MAX = MOTIVO_MAX * 2;
 export const DOWNLOAD_FINAL_DIAS = 30;
 // Seção 15: versão do texto de consentimento em vigor.
 export const CONSENTIMENTO_VERSAO = "2026-11-17";
+
+// Finalização (épico 8.6, regras 11.3, 11.10 e seção 15.2).
+export const SELO_PLACEHOLDER_BYTES = 24 * 1024; // regra 11.10
+export const TSA_TIMEOUT_MS = 5000; // regra 11.10
+export const FINALIZACAO_TENTATIVAS = 3; // regra 11.10: a do momento + 2 da faxina
+export const ANEXO_EMAIL_MAX_BYTES = 7 * 1024 * 1024; // critério 8.6: PDF anexo até 7 MB
+export const CAMPO_TEXTO_PT = 10; // regra 11.3: texto em Helvetica 10 pt

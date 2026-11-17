@@ -6,6 +6,11 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
+  // A fonte cursiva é lida do node_modules na finalização (src/server/pdf/fonts.ts, épico 8.6):
+  // sem isto, o arquivo não iria para a função da Vercel.
+  outputFileTracingIncludes: {
+    "/api/**": ["./node_modules/@fontsource/dancing-script/files/dancing-script-latin-400-normal.woff"],
+  },
   async headers() {
     return [
       {

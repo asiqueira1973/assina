@@ -12,11 +12,14 @@ import { EMAIL_TIMEOUT_MS } from "@/lib/limits";
 
 export type EmailMessage = {
   to: string;
-  fromName: string;
+  /** Nome do remetente do envelope ("{nome} via Assina"); ausente nos e-mails da própria plataforma. */
+  fromName?: string;
   replyTo?: string;
   subject: string;
   html: string;
   text: string;
+  /** Anexos (só o PDF final, critério 8.6: até 7 MB). */
+  attachments?: { filename: string; content: Uint8Array }[];
 };
 
 export interface Mailer {
@@ -27,8 +30,10 @@ export interface Mailer {
 // Remetente técnico (seção 15.2): "{remetente} via Assina" <EMAIL_REMETENTE>. O nome vai entre
 // aspas e sem aspas, barras, quebras de linha nem caracteres de controle: vírgula, @ ou ";" num
 // nome sem aspas quebraria o cabeçalho e todo convite da conta falharia (achado do verifier).
-export function fromHeader(name: string): string {
+export function fromHeader(name?: string): string {
   const address = process.env.EMAIL_REMETENTE || "naoresponda@assina.app.br";
+  // E-mail da própria plataforma (avisos ao remetente, alerta ao admin): só "Assina".
+  if (name === undefined) return `"Assina" <${address}>`;
   const safe = name.replace(/[\x00-\x1f\x7f"\\<>]/g, " ").replace(/\s+/g, " ").trim() || "Assina";
   return `"${safe} via Assina" <${address}>`;
 }
@@ -40,7 +45,15 @@ function resendMailer(apiKey: string): Mailer {
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-        body: JSON.stringify({ from: fromHeader(m.fromName), to: [m.to], reply_to: m.replyTo, subject: m.subject, html: m.html, text: m.text }),
+        body: JSON.stringify({
+          from: fromHeader(m.fromName),
+          to: [m.to],
+          reply_to: m.replyTo,
+          subject: m.subject,
+          html: m.html,
+          text: m.text,
+          attachments: m.attachments?.map((a) => ({ filename: a.filename, content: Buffer.from(a.content).toString("base64") })),
+        }),
         signal: AbortSignal.timeout(EMAIL_TIMEOUT_MS),
       });
       if (!res.ok) throw new Error(`resend_${res.status}`);
@@ -60,6 +73,7 @@ function localMailer(): Mailer {
       const header = `De: ${fromHeader(m.fromName)}\nPara: ${m.to}\nResponder para: ${m.replyTo ?? "-"}\nAssunto: ${m.subject}\n\n`;
       await writeFile(join(dir, `${id}.txt`), header + m.text);
       await writeFile(join(dir, `${id}.html`), `<!-- ${header.replace(/--/g, "- -")} -->\n${m.html}`);
+      for (const [i, a] of (m.attachments ?? []).entries()) await writeFile(join(dir, `${id}-anexo-${i + 1}.pdf`), a.content);
       return { id: `local-${id}` };
     },
   };

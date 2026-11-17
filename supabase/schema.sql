@@ -174,6 +174,22 @@ CREATE TYPE "public"."as_tipo_notificacao" AS ENUM (
 ALTER TYPE "public"."as_tipo_notificacao" OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."as_fn_alerta_finalizacao"("p_conta_id" "uuid", "p_envelope_id" "uuid") RETURNS boolean
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  insert into public.as_notificacoes (conta_id, envelope_id, tipo, chave)
+  values (p_conta_id, p_envelope_id, 'finalizacao_falhou_admin', 'finalizacao_falhou_admin:' || p_envelope_id)
+  on conflict (chave) do nothing;
+  return found;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."as_fn_alerta_finalizacao"("p_conta_id" "uuid", "p_envelope_id" "uuid") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."as_fn_anexa_arquivo"("p_envelope_id" "uuid", "p_conta_id" "uuid", "p_caminho" "text", "p_nome" "text", "p_tamanho" integer, "p_paginas" smallint, "p_dimensoes" "jsonb") RETURNS TABLE("caminho_anterior" "text", "campos_removidos" boolean)
     LANGUAGE "plpgsql"
     SET "search_path" TO ''
@@ -265,6 +281,7 @@ begin
     v_n_campos := v_n_campos + 1;
     select c ->> 'valor' into v_valor from jsonb_array_elements(coalesce(p_campos, '[]'::jsonb)) c where (c ->> 'id')::uuid = v_campo.id;
     if v_campo.tipo = 'texto' then
+      -- 200 = TEXTO_CAMPO_MAX (src/lib/limits.ts); o servidor já recusa acima disso, aqui é a trava final.
       v_valor := nullif(left(trim(coalesce(v_valor, '')), 200), '');
       if v_campo.obrigatorio and v_valor is null then raise exception 'campo_obrigatorio'; end if;
     elsif v_campo.tipo = 'caixa' then
@@ -284,6 +301,7 @@ begin
      set status = 'assinou',
          assinado_em = now(),
          metodo_assinatura = p_metodo,
+         -- 100 = NOME_MAX (src/lib/limits.ts), trava final.
          assinatura_texto = case when p_metodo = 'digitada' then left(trim(p_assinatura_texto), 100) end,
          assinatura_imagem_path = case when p_metodo = 'desenhada' then p_assinatura_path end,
          rubrica_texto = nullif(left(trim(coalesce(p_rubrica_texto, '')), 100), ''),
@@ -344,6 +362,71 @@ $$;
 
 ALTER FUNCTION "public"."as_fn_atualizado_em"() OWNER TO "postgres";
 
+
+CREATE OR REPLACE FUNCTION "public"."as_fn_conclui_envelope"("p_envelope_id" "uuid", "p_reserva" "uuid", "p_caminho" "text", "p_hash_final" "text", "p_selo" "text", "p_concluido_em" timestamp with time zone) RETURNS "void"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  v_e public.as_envelopes;
+  v_webhook text;
+begin
+  select * into v_e from public.as_envelopes where id = p_envelope_id for update;
+  if v_e.id is null or v_e.status <> 'finalizando' then
+    raise exception 'status_mudou';
+  end if;
+  if v_e.finalizacao_reserva is null or v_e.finalizacao_reserva is distinct from p_reserva then
+    raise exception 'sem_reserva';
+  end if;
+  if p_caminho is distinct from v_e.conta_id || '/' || v_e.id || '/final-' || p_reserva || '.pdf' then
+    raise exception 'caminho_invalido';
+  end if;
+  if p_concluido_em is null or p_concluido_em > now() or p_concluido_em < v_e.enviado_em then
+    raise exception 'data_invalida';
+  end if;
+
+  if not public.as_fn_transicao_envelope(p_envelope_id, 'finalizando', 'concluido') then
+    raise exception 'status_mudou';
+  end if;
+  update public.as_envelopes
+     set arquivo_final_path = p_caminho,
+         hash_final = p_hash_final,
+         selo = p_selo,
+         concluido_em = p_concluido_em,
+         finalizacao_reserva = null,
+         finalizacao_reservada_em = null,
+         erro_finalizacao = null
+   where id = p_envelope_id;
+
+  perform public.as_fn_registra_evento(p_envelope_id, 'finalizado', 'sistema', null, null, null,
+    jsonb_build_object('hash_final', p_hash_final, 'selo', p_selo));
+  perform public.as_fn_registra_evento(p_envelope_id, 'concluido', 'sistema', null, null, null, '{}');
+
+  insert into public.as_notificacoes (conta_id, envelope_id, signatario_id, tipo, chave)
+  select v_e.conta_id, v_e.id, s.id, 'concluido_destinatario', 'concluido_destinatario:' || s.id
+    from public.as_signatarios s
+   where s.envelope_id = v_e.id
+  on conflict (chave) do nothing;
+  insert into public.as_notificacoes (conta_id, envelope_id, tipo, chave)
+  values (v_e.conta_id, v_e.id, 'concluido_remetente', 'concluido_remetente:' || v_e.id)
+  on conflict (chave) do nothing;
+
+  select webhook_url into v_webhook from public.as_contas where id = v_e.conta_id;
+  if v_webhook is not null then
+    insert into public.as_entregas_webhook (conta_id, envelope_id, evento, corpo)
+    values (v_e.conta_id, v_e.id, 'envelope.concluido', jsonb_build_object(
+      'evento', 'envelope.concluido',
+      'envelope', jsonb_build_object('id', v_e.id, 'status', 'concluido', 'titulo', v_e.titulo,
+        'codigo_verificacao', v_e.codigo_verificacao, 'concluido_em', p_concluido_em, 'hash_final', p_hash_final),
+      'ocorrido_em', now()
+    ));
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."as_fn_conclui_envelope"("p_envelope_id" "uuid", "p_reserva" "uuid", "p_caminho" "text", "p_hash_final" "text", "p_selo" "text", "p_concluido_em" timestamp with time zone) OWNER TO "postgres";
+
 SET default_tablespace = '';
 
 SET default_table_access_method = "heap";
@@ -379,8 +462,12 @@ CREATE TABLE IF NOT EXISTS "public"."as_envelopes" (
     "arquivos_expurgados_em" timestamp with time zone,
     "criado_em" timestamp with time zone DEFAULT "now"() NOT NULL,
     "atualizado_em" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "finalizacao_reserva" "uuid",
+    "finalizacao_reservada_em" timestamp with time zone,
+    "erro_finalizacao" "text",
     CONSTRAINT "as_envelopes_chave_idempotencia_check" CHECK ((("chave_idempotencia" IS NULL) OR (("char_length"("chave_idempotencia") >= 1) AND ("char_length"("chave_idempotencia") <= 100)))),
     CONSTRAINT "as_envelopes_codigo_verificacao_check" CHECK (("codigo_verificacao" ~ '^[0-9A-HJKMNP-TV-Z]{12}$'::"text")),
+    CONSTRAINT "as_envelopes_erro_finalizacao_check" CHECK ((("erro_finalizacao" IS NULL) OR ("char_length"("erro_finalizacao") <= 200))),
     CONSTRAINT "as_envelopes_hash_final_check" CHECK ((("hash_final" IS NULL) OR ("hash_final" ~ '^[0-9a-f]{64}$'::"text"))),
     CONSTRAINT "as_envelopes_hash_original_check" CHECK ((("hash_original" IS NULL) OR ("hash_original" ~ '^[0-9a-f]{64}$'::"text"))),
     CONSTRAINT "as_envelopes_lembrete_cada_dias_check" CHECK ((("lembrete_cada_dias" IS NULL) OR ("lembrete_cada_dias" = ANY (ARRAY[2, 3, 7])))),
@@ -711,6 +798,40 @@ $$;
 ALTER FUNCTION "public"."as_fn_eventos_imutaveis"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."as_fn_falha_finalizacao"("p_envelope_id" "uuid", "p_reserva" "uuid", "p_erro" "text", "p_max_tentativas" integer, "p_definitiva" boolean DEFAULT false) RETURNS TABLE("tentativas" integer, "alerta" boolean)
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  v_e public.as_envelopes;
+  v_tentativas integer;
+begin
+  select * into v_e from public.as_envelopes where id = p_envelope_id for update;
+  if v_e.id is null or v_e.status <> 'finalizando' or v_e.finalizacao_reserva is distinct from p_reserva then
+    return query select coalesce(v_e.tentativas_finalizacao, 0)::integer, false;
+    return;
+  end if;
+  v_tentativas := case when p_definitiva then greatest(p_max_tentativas, v_e.tentativas_finalizacao)
+                       else v_e.tentativas_finalizacao end;
+  update public.as_envelopes
+     set tentativas_finalizacao = v_tentativas,
+         finalizacao_reserva = null,
+         finalizacao_reservada_em = null,
+         erro_finalizacao = left(p_erro, 200)
+   where id = p_envelope_id;
+
+  if v_tentativas >= p_max_tentativas then
+    return query select v_tentativas, public.as_fn_alerta_finalizacao(v_e.conta_id, v_e.id);
+  else
+    return query select v_tentativas, false;
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."as_fn_falha_finalizacao"("p_envelope_id" "uuid", "p_reserva" "uuid", "p_erro" "text", "p_max_tentativas" integer, "p_definitiva" boolean) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."as_fn_filhos_congelados"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     SET "search_path" TO ''
@@ -772,6 +893,26 @@ $$;
 ALTER FUNCTION "public"."as_fn_filhos_congelados"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."as_fn_final_imutavel"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  if (old.hash_final is not null and new.hash_final is distinct from old.hash_final)
+     or (old.arquivo_final_path is not null and new.arquivo_final_path is distinct from old.arquivo_final_path)
+     or (old.selo is not null and new.selo is distinct from old.selo)
+     or (old.concluido_em is not null and new.concluido_em is distinct from old.concluido_em)
+  then
+    raise exception 'envelope_congelado';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."as_fn_final_imutavel"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."as_fn_novo_codigo"("p_signatario_id" "uuid", "p_codigo_hash" "text", "p_validade_s" integer, "p_intervalo_s" integer, "p_max_hora" integer) RETURNS "text"
     LANGUAGE "plpgsql"
     SET "search_path" TO ''
@@ -781,11 +922,16 @@ declare
   v_status public.as_status_envelope;
   v_enviados smallint;
   v_desde timestamptz;
+  v_prazo timestamptz;
 begin
   select * into v_s from public.as_signatarios where id = p_signatario_id for update;
-  select status into v_status from public.as_envelopes where id = v_s.envelope_id;
+  select status, prazo_em into v_status, v_prazo from public.as_envelopes where id = v_s.envelope_id;
   if v_s.id is null or v_s.status <> 'aguardando' or v_status <> 'enviado' then
     return 'indisponivel';
+  end if;
+  -- Regra 11.7: vale o prazo_em; a faxina só muda o status depois.
+  if v_prazo <= now() then
+    return 'prazo_encerrado';
   end if;
 
   -- O último código saiu em (expira_em − validade).
@@ -844,6 +990,7 @@ begin
   if v_e.prazo_em <= now() then
     raise exception 'prazo_encerrado';
   end if;
+  -- 500 = MOTIVO_MAX (src/lib/limits.ts).
   if char_length(v_motivo) not between 1 and 500 then
     raise exception 'motivo_invalido';
   end if;
@@ -947,6 +1094,38 @@ $$;
 
 
 ALTER FUNCTION "public"."as_fn_registra_evento"("p_envelope_id" "uuid", "p_tipo" "public"."as_tipo_evento", "p_ator" "public"."as_ator", "p_signatario_id" "uuid", "p_ip" "inet", "p_user_agent" "text", "p_dados" "jsonb") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."as_fn_reserva_finalizacao"("p_envelope_id" "uuid", "p_max_tentativas" integer) RETURNS TABLE("resultado" "text", "reserva" "uuid")
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  v_e public.as_envelopes;
+  v_reserva uuid := gen_random_uuid();
+begin
+  select * into v_e from public.as_envelopes where id = p_envelope_id for update;
+  if v_e.id is null or v_e.status <> 'finalizando'
+     or (v_e.finalizacao_reservada_em is not null and v_e.finalizacao_reservada_em >= now() - interval '5 minutes') then
+    return query select 'ocupado'::text, null::uuid;
+    return;
+  end if;
+  if v_e.tentativas_finalizacao >= p_max_tentativas then
+    update public.as_envelopes set finalizacao_reserva = null, finalizacao_reservada_em = null where id = p_envelope_id;
+    return query select case when public.as_fn_alerta_finalizacao(v_e.conta_id, v_e.id) then 'esgotado_alerta' else 'esgotado' end::text, null::uuid;
+    return;
+  end if;
+  update public.as_envelopes
+     set finalizacao_reserva = v_reserva,
+         finalizacao_reservada_em = now(),
+         tentativas_finalizacao = tentativas_finalizacao + 1
+   where id = p_envelope_id;
+  return query select 'ok'::text, v_reserva;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."as_fn_reserva_finalizacao"("p_envelope_id" "uuid", "p_max_tentativas" integer) OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."as_fn_reserva_notificacao"("p_id" "uuid", "p_max_tentativas" integer) RETURNS boolean
@@ -1175,11 +1354,16 @@ declare
   v_s public.as_signatarios;
   v_status public.as_status_envelope;
   v_tentativas integer;
+  v_prazo timestamptz;
 begin
   select * into v_s from public.as_signatarios where id = p_signatario_id for update;
-  select status into v_status from public.as_envelopes where id = v_s.envelope_id;
+  select status, prazo_em into v_status, v_prazo from public.as_envelopes where id = v_s.envelope_id;
   if v_s.id is null or v_s.status <> 'aguardando' or v_status <> 'enviado' then
     return query select 'indisponivel'::text, 0;
+    return;
+  end if;
+  if v_prazo <= now() then
+    return query select 'prazo_encerrado'::text, 0;
     return;
   end if;
   if v_s.codigo_hash is null then
@@ -1191,6 +1375,8 @@ begin
     return;
   end if;
 
+  -- Compara hashes sha256, não o código: o tempo da comparação não revela nada do código
+  -- (a regra 11.4 pede tempo constante para isso).
   if v_s.codigo_hash = p_codigo_hash then
     update public.as_signatarios set codigo_hash = null, codigo_tentativas = 0 where id = p_signatario_id;
     perform public.as_fn_registra_evento(v_s.envelope_id, 'codigo_validado', 'signatario', p_signatario_id, p_ip, p_user_agent, '{}');
@@ -1583,6 +1769,10 @@ CREATE OR REPLACE TRIGGER "as_tg_filhos_congelados" BEFORE INSERT OR DELETE OR U
 
 
 
+CREATE OR REPLACE TRIGGER "as_tg_final_imutavel" BEFORE UPDATE ON "public"."as_envelopes" FOR EACH ROW EXECUTE FUNCTION "public"."as_fn_final_imutavel"();
+
+
+
 CREATE OR REPLACE TRIGGER "as_tg_valida_campo" BEFORE INSERT OR UPDATE ON "public"."as_campos" FOR EACH ROW EXECUTE FUNCTION "public"."as_fn_valida_campo"();
 
 
@@ -1712,6 +1902,11 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."as_fn_alerta_finalizacao"("p_conta_id" "uuid", "p_envelope_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_alerta_finalizacao"("p_conta_id" "uuid", "p_envelope_id" "uuid") TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."as_fn_anexa_arquivo"("p_envelope_id" "uuid", "p_conta_id" "uuid", "p_caminho" "text", "p_nome" "text", "p_tamanho" integer, "p_paginas" smallint, "p_dimensoes" "jsonb") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."as_fn_anexa_arquivo"("p_envelope_id" "uuid", "p_conta_id" "uuid", "p_caminho" "text", "p_nome" "text", "p_tamanho" integer, "p_paginas" smallint, "p_dimensoes" "jsonb") TO "service_role";
 
@@ -1724,6 +1919,11 @@ GRANT ALL ON FUNCTION "public"."as_fn_assina"("p_signatario_id" "uuid", "p_token
 
 REVOKE ALL ON FUNCTION "public"."as_fn_atualizado_em"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."as_fn_atualizado_em"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."as_fn_conclui_envelope"("p_envelope_id" "uuid", "p_reserva" "uuid", "p_caminho" "text", "p_hash_final" "text", "p_selo" "text", "p_concluido_em" timestamp with time zone) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_conclui_envelope"("p_envelope_id" "uuid", "p_reserva" "uuid", "p_caminho" "text", "p_hash_final" "text", "p_selo" "text", "p_concluido_em" timestamp with time zone) TO "service_role";
 
 
 
@@ -1775,8 +1975,18 @@ GRANT ALL ON FUNCTION "public"."as_fn_eventos_imutaveis"() TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."as_fn_falha_finalizacao"("p_envelope_id" "uuid", "p_reserva" "uuid", "p_erro" "text", "p_max_tentativas" integer, "p_definitiva" boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_falha_finalizacao"("p_envelope_id" "uuid", "p_reserva" "uuid", "p_erro" "text", "p_max_tentativas" integer, "p_definitiva" boolean) TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."as_fn_filhos_congelados"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."as_fn_filhos_congelados"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."as_fn_final_imutavel"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_final_imutavel"() TO "service_role";
 
 
 
@@ -1796,6 +2006,11 @@ GRANT ALL ON TABLE "public"."as_eventos" TO "service_role";
 
 REVOKE ALL ON FUNCTION "public"."as_fn_registra_evento"("p_envelope_id" "uuid", "p_tipo" "public"."as_tipo_evento", "p_ator" "public"."as_ator", "p_signatario_id" "uuid", "p_ip" "inet", "p_user_agent" "text", "p_dados" "jsonb") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."as_fn_registra_evento"("p_envelope_id" "uuid", "p_tipo" "public"."as_tipo_evento", "p_ator" "public"."as_ator", "p_signatario_id" "uuid", "p_ip" "inet", "p_user_agent" "text", "p_dados" "jsonb") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."as_fn_reserva_finalizacao"("p_envelope_id" "uuid", "p_max_tentativas" integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_reserva_finalizacao"("p_envelope_id" "uuid", "p_max_tentativas" integer) TO "service_role";
 
 
 

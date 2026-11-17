@@ -4,7 +4,7 @@ Descreve o sistema **como está implementado**, não como foi planejado (spec.md
 
 | | |
 |---|---|
-| Estado | Épicos 8.0 a 8.5 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
+| Estado | Épicos 8.0 a 8.6 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
 | Stack | Next.js 16.4.6 (App Router, Cache Components, `proxy.ts`), React 19.3, TypeScript, Supabase Postgres (projeto compartilhado, prefixo `as_`), Vitest, pgTAP |
 
 ---
@@ -19,7 +19,7 @@ Banco em português, prefixo `as_`. Toda tabela com RLS ligado e **nenhuma polí
 | `as_credenciais` | Chave de API da conta e tokens do MCP | `tipo` `api`: a chave que nasce com a conta, guardada como hash (para busca) **e** cifrada (para a tela mostrar de novo). `tipo` `mcp`: token entregue pelo OAuth, só o hash. `prefixo`: os 12 primeiros caracteres, para exibir. `revogada_em`: nulo = válida. Uma chave de API ativa por conta (índice `as_credenciais_api_uk`) |
 | `as_oauth_clientes` | Clientes MCP (Claude, ChatGPT) que se registram sozinhos | `id` é o `client_id`; `redirect_uris` de 1 a 5 |
 | `as_oauth_codigos` | Código de autorização do OAuth do MCP, de uso único | `codigo_hash`: só o hash; `expira_em`: 10 min; `usado_em`: nulo até ser trocado |
-| `as_envelopes` | Um documento enviado para assinatura | `status`: ver enum. `origem`: por onde nasceu (painel, API ou MCP). `hash_original`: SHA-256 do PDF, preenchido no envio e nunca mais alterado. `codigo_verificacao`: 12 caracteres base32 Crockford, impresso no manifesto. `arquivos_expurgados_em`: quando a faxina apagou os arquivos de um envelope encerrado sem conclusão |
+| `as_envelopes` | Um documento enviado para assinatura | `status`: ver enum. `origem`: por onde nasceu (painel, API ou MCP). `hash_original`: SHA-256 do PDF, preenchido no envio e nunca mais alterado. `codigo_verificacao`: 12 caracteres base32 Crockford, impresso no manifesto. `arquivos_expurgados_em`: quando a faxina apagou os arquivos de um envelope encerrado sem conclusão. `finalizacao_reserva` / `finalizacao_reservada_em`: quem está finalizando agora e desde quando (vence em 5 min). `tentativas_finalizacao`: contada ao reservar. `erro_finalizacao`: código da última falha. `arquivo_final_path`: `{conta}/{id}/final-{reserva}.pdf`. `hash_final`, `arquivo_final_path`, `selo` e `concluido_em` não mudam depois de preenchidos (`as_tg_final_imutavel`) |
 | `as_signatarios` | Quem assina (`assinar`) ou só recebe cópia (`copia`) | `token_hash`: SHA-256 do token do link (o link em si não fica no banco). `ordem`: 1–10, única entre os assinantes do envelope (exclusion constraint diferida, para reordenar numa transação); nas cópias é sempre 1 e não significa nada. `codigo_*`: o código de 6 dígitos atual e seus contadores. `ip_assinatura`/`user_agent_assinatura`: evidência do momento da assinatura |
 | `as_campos` | Campos posicionados no PDF | `x`, `y`, `largura`, `altura` em fração da página (0–1, origem no canto superior esquerdo); o campo nunca passa da borda (check). `valor`: preenchido na assinatura |
 | `as_eventos` | Trilha de auditoria | Só inserção. `seq` 1, 2, 3… por envelope. `hash` encadeado no `hash_anterior` (regra 11.6). `ocorrido_em`: relógio do banco |
@@ -84,11 +84,16 @@ Fonte: `supabase/migrations/20261117130100_as_logica.sql`. Toda função com `se
 | `as_fn_valida_codigo` | função | `as_signatarios`, `as_eventos` | digitar o código | uso único; 5 erros bloqueiam; registra acerto e erro na trilha |
 | `as_fn_assina` | função | envelope, signatário, campos, trilha, notificações | assinar | tudo numa transação: confere link, status, prazo, assinatura, CPF, campos; grava; registra consentiu e assinou; próximo da ordem ou finalizando |
 | `as_fn_recusa` | função | envelope, signatário, trilha, notificações, webhooks | recusar | envelope recusado e encerrado; avisos; webhook na fila |
+| `as_fn_reserva_finalizacao` | função | envelope, notificações | finalizar | um finalizador por vez, com id de reserva; conta a tentativa; esgotado sem alerta → enfileira o alerta |
+| `as_fn_alerta_finalizacao` | função | `as_notificacoes` | finalizar | alerta ao admin uma vez só |
+| `as_fn_conclui_envelope` | função | envelope, trilha, notificações, webhooks | finalizar | `finalizando → concluido` com hash, selo e caminho; eventos `finalizado` e `concluido`; e-mails de conclusão e webhook na mesma transação |
+| `as_fn_falha_finalizacao` | função | envelope, notificações | finalizar | registra a falha só da própria reserva; na 3ª tentativa (ou na `integridade_violada`), alerta ao admin |
+| `as_tg_final_imutavel` | trigger | `as_envelopes` | — | o resultado da finalização não se reescreve |
 | `as_fn_entra_conta` | função | `as_contas`, `as_credenciais` | login | cria a conta já com a chave de API, na mesma transação; conta existente atualiza só o e-mail; suspensa não é tocada |
 
 Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `envelope_congelado`, `envelope_em_andamento`, `status_mudou`, `campo_invalido`, `campos_demais`, `status_mudou`, `envelope_mudou`, `sem_assinante`, `limite_diario`, `limite_do_nivel`, `nao_encontrado`, `email_repetido`, `assinantes_demais`, `copias_demais`).
 
-## 4. Mapa tela → tabelas (até o 8.5)
+## 4. Mapa tela → tabelas (até o 8.6)
 
 | Tela / rota | Lê | Escreve | Passa por |
 |---|---|---|---|
@@ -117,7 +122,9 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | `/assinar/{token}` (signatário) | `as_signatarios`, `as_envelopes`, `as_contas`, `as_campos` | via as rotas abaixo | `loadSignerByToken`, `signerPageState` |
 | `POST /api/assinar/{token}/codigo` · `/validar` | `as_signatarios` | `as_signatarios`, `as_eventos` (cookie `as_sig_{id}` ao validar) | `requireSignatarioPorToken`, `as_fn_novo_codigo`, `as_fn_valida_codigo` |
 | `POST /api/assinar/{token}/visualizou` | `as_eventos` | `as_eventos` | sessão do signatário |
-| `POST /api/assinar/{token}/assinar` · `/recusar` | — | via `as_fn_assina` / `as_fn_recusa`; imagens no armazenamento | sessão do signatário |
+| `POST /api/assinar/{token}/assinar` · `/recusar` | — | via `as_fn_assina` / `as_fn_recusa`; imagens no armazenamento. A última assinatura dispara a finalização depois da resposta (`after`, `maxDuration` 60 s) | sessão do signatário |
+| `GET /api/final/{signatario_id}.{hmac}` (link do e-mail de conclusão acima de 7 MB) | signatário, envelope, conta | `as_eventos` (`baixou_final`) | `readFinalDownloadKey` (HMAC); 30 dias depois de `concluido_em` |
+| Finalização (servidor, sem tela) | envelope, signatários, campos, trilha; original e imagens no armazenamento | `final.pdf` no armazenamento; via `as_fn_conclui_envelope` / `as_fn_falha_finalizacao` | `finalizeEnvelope`, `retryFinalizations` |
 | `GET /api/assinar/{token}/documento` | `as_envelopes` | `as_eventos` (`baixou_final`) | sessão para o original; só o link para o final (até 30 dias) |
 | `PUT/GET /api/dev/arquivos/{caminho}` (só dev) | arquivo local | arquivo local | HMAC + validade; 404 em produção ou com R2 |
 
@@ -141,6 +148,11 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
   - "Recusar" chama `decline` (`as_fn_recusa`) e manda os avisos;
   - "visualizou" sai quando a primeira página aparece, uma vez por sessão (pelo `jti`).
 - **Avisos por e-mail:** `src/server/notifications/notices.ts` manda `assinou_remetente`, `recusado_remetente` e `recusado_destinatario` com a mesma reserva do convite; `retryFailedNotices` é a parte da faxina (rota no 8.13).
+- **Finalização (`src/server/envelopes/finalize.ts`):** `finalizeEnvelope(id)` reserva o envelope (com id de reserva; a tentativa conta ali, então um timeout também conta), lê o original e confere o SHA-256 (se não bater: `integridade_violada`, falha definitiva com alerta ao admin), grava os campos (`src/server/pdf/stamp.ts`), anexa o manifesto (`src/server/pdf/manifest.ts`), sela (`src/server/pdf/seal.ts`), sobe `{conta}/{id}/final-{reserva}.pdf` e chama `as_fn_conclui_envelope` com a reserva. Um finalizador atrasado (reserva vencida e tomada) não conclui, não registra falha e não grava por cima do final de ninguém; o arquivo dele é apagado. Depois do commit, manda os e-mails de conclusão. Qualquer exceção vira `as_fn_falha_finalizacao` com o código do erro, e a função nunca lança. `retryFinalizations` é a parte da faxina (rota no 8.13).
+  - **Campos (11.3):** a fração gravada pelo editor é a da página como o pdf.js a mostra (CropBox, já girada). `fieldFrame` desfaz essa conta para os quatro giros, e o teste compara com `viewport.convertToPdfPoint` do próprio pdf.js. Assinatura e rubrica digitadas saem em "Dancing Script" embutida (subconjunto, `@pdf-lib/fontkit`); as desenhadas, como PNG com a proporção preservada; texto, data e nome em Helvetica 10 pt numa linha; a caixa marcada vira um ✓ em dois traços.
+  - **Texto no PDF:** tudo passa por `safeText` (`src/server/pdf/fonts.ts`), porque a Helvetica padrão só codifica WinAnsi e um caractere fora dele quebraria o `drawText`.
+  - **Selo (11.10):** o placeholder de 24 KB entra pelo `@signpdf/placeholder-pdf-lib` com `ETSI.CAdES.detached`, e o CMS é montado à mão com node-forge (`CadesSigner`). Os atributos assinados são `contentType`, `messageDigest` e `signingCertificateV2`; não há `signingTime`, porque no PAdES a hora vai no `/M`. Com `SELO_TSA_URL`, pede o carimbo RFC 3161 (5 s) e o põe como atributo não assinado: sai `B-T`; sem resposta, `B-B`. `verifySeal` confere o hash do ByteRange e a assinatura RSA (testes). Conferido também com `openssl cms -verify`.
+  - **E-mails de conclusão:** `concluido_destinatario` (assinantes e cópias) e `concluido_remetente` levam o PDF anexo se ele tiver até 7 MB. Acima disso, o do destinatário leva o botão para o link próprio `/api/final/{signatario_id}.{hmac}` (`src/server/envelopes/final-link.ts`), estável e só para o final; o link de assinatura não muda. O do remetente leva o link do detalhe. Sem `ADMIN_EMAIL`, o alerta fica pendente e o log avisa (`alerta_admin_sem_destino`). O `finalizacao_falhou_admin` vai para `ADMIN_EMAIL`.
 - **Erros em log:** `src/server/error-code.ts` (`errorCode`) dá o código do erro (Postgres, `resend_NNN`) ou o nome da classe; é o que vai para o log e para `as_notificacoes.erro`, nunca a mensagem livre.
 - **E-mail:** `src/server/email/mailer.ts` escolhe o driver: Resend com `RESEND_API_KEY`; caixa local em `.caixa-de-saida-local/` (um `.txt` e um `.html` por e-mail) só fora de produção; em produção sem chave o app falha. O modelo do convite fica em `templates.ts` (seção 15.2, HTML escapado e texto puro), com remetente "{nome} via Assina" e `reply-to` do remetente.
 - **Uso do nível:** "{n} de {limite} documentos · Nível {n}" no topo da lista e na Conta, em laranja a partir de 80% (`getUsage`).
@@ -171,4 +183,11 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | 19 | Componentes do pdf.js extraídos para `src/features/pdf/pdf-page.tsx` | Usados pelo editor de campos e pela página do signatário |
 | 20 | CSP completa adiada para o 8.13 | Precisa de nonce para os scripts do Next e do worker do pdf.js; os outros cabeçalhos da seção 17 já valem |
 | 21 | Código conferido por `=` entre hashes sha256 (regra 11.4 pede tempo constante) | Comparar hashes não revela o código pelo tempo; o efeito pedido pela regra se mantém |
-| 22 | Migrations ainda não aplicadas no remoto | O hook `guard-production.sh` da sessão em que o épico foi feito (pasta do agenda-psi) bloqueou o `apply_migration`; aguardando o Alexandre |
+| 22 | `integridade_violada` é código de erro (em `erro_finalizacao` e no alerta), não evento da trilha | O enum `as_tipo_evento` da seção 7 não tem esse tipo; o envelope continua em `finalizando` e o admin recebe o alerta na hora |
+| 23 | "UTC−3" sai "UTC-3" no PDF e letras fora do WinAnsi perdem o acento ou viram "?" (spec v0.9) | A Helvetica padrão do PDF só tem WinAnsi; embutir outra fonte para o texto só por isso aumentaria todo arquivo |
+| 24 | E-mail de conclusão acima de 7 MB leva um link próprio de download (`/api/final/{id}.{hmac}`), não o "link do signatário" do critério | O banco guarda só o hash do link de assinatura; trocá-lo derrubaria a sessão de quem acabou de assinar e, numa retentativa do e-mail, deixaria a pessoa sem link (achado do verifier). Cópias nem tinham link |
+| 25 | `validatePdf` passou a guardar o tamanho visível da página (CropBox, girado) | Era o MediaBox sem giro: numa página girada ou recortada, o editor esticava a página e o campo caía fora do lugar no PDF final |
+| 26 | Webhook `signatario.assinou` ainda não é enfileirado | Fica com a entrega HTTP no 8.9; `envelope.concluido` e `envelope.recusado` já vão para a fila |
+| 27 | Abrir o `final.pdf` no Adobe Reader e no Preview (critério 8.6) ainda não foi feito | Esta máquina não tem o Adobe Reader; o selo foi conferido pelo `openssl cms -verify` e pelos testes. Fica na `PENDENCIAS.md` (P6) |
+| 28 | O final fica em `final-{reserva}.pdf`, e não em `final.pdf` (spec v0.9) | Com o caminho da tentativa, um finalizador atrasado nunca sobrescreve o final de um envelope concluído (achado do verifier) |
+| 29 | Migrations ainda não aplicadas no remoto | O hook `guard-production.sh` da sessão em que o épico foi feito (pasta do agenda-psi) bloqueou o `apply_migration`; aguardando o Alexandre |

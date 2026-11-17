@@ -39,3 +39,25 @@ describe("validação do PDF (regra 11.1)", () => {
     expect(check.ok && check.alreadySigned).toBe(true);
   });
 });
+
+describe("dimensões como o pdf.js mostra (regra 11.3)", () => {
+  it("página girada 90° e com CropBox: largura e altura vistas", async () => {
+    const { degrees, PDFDocument } = await import("pdf-lib");
+    const doc = await PDFDocument.create();
+    const p = doc.addPage([600, 800]);
+    p.setCropBox(0, 0, 500, 700);
+    p.setRotation(degrees(90));
+    const r = await validatePdf(await doc.save());
+    expect(r.ok && r.dimensions).toEqual([{ l: 700, a: 500 }]);
+  });
+});
+
+describe("limite de 1.440 pt também no MediaBox", () => {
+  it("MediaBox enorme com CropBox pequeno é recusado", async () => {
+    const { PDFDocument } = await import("pdf-lib");
+    const doc = await PDFDocument.create();
+    const p = doc.addPage([3000, 3000]);
+    p.setCropBox(0, 0, 500, 700);
+    expect(await validatePdf(await doc.save())).toEqual({ ok: false, code: "pagina_grande_demais" });
+  });
+});

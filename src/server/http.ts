@@ -1,7 +1,7 @@
 // Utilidades HTTP das rotas (seção 13): metadados de quem pediu e tradução dos erros de negócio
 // para o formato { codigo, mensagem? } da API. Nunca devolve detalhe interno em 500.
 import "server-only";
-import type { NextRequest } from "next/server";
+import { after, type NextRequest } from "next/server";
 import { DraftError, type RequestMeta } from "@/server/envelopes/drafts";
 
 const PDF_CODES = new Set(["nao_e_pdf", "grande_demais", "paginas_demais", "protegido_por_senha", "pagina_grande_demais", "arquivo_ausente"]);
@@ -39,4 +39,15 @@ export function errorResponse(e: unknown): Response {
   }
   console.error("erro_interno", e instanceof Error ? e.message : "erro");
   return Response.json({ codigo: "erro_interno" }, { status: 500 });
+}
+
+// Agenda trabalho para depois da resposta (after do Next 16, critério 8.6: a finalização não
+// segura a tela de quem assinou). Fora de uma requisição (testes chamando a rota direto), o
+// after não existe: roda na hora e espera. Recebe: a tarefa. Devolve: quando agendou (ou terminou).
+export async function runAfterResponse(task: () => Promise<unknown>): Promise<void> {
+  try {
+    after(task);
+  } catch {
+    await task();
+  }
 }

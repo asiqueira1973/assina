@@ -2,6 +2,7 @@
 // segredos descartáveis. A chave de serviço local é lida do `supabase status` (não fica no git).
 import { execSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { testSealCredentials } from "./fixtures/seal";
 
 function localSupabaseEnv(): Record<string, string> {
   try {
@@ -27,6 +28,12 @@ process.env.CRON_SECRET = randomBytes(24).toString("base64url");
 process.env.EMAILS_PERMITIDOS = "";
 process.env.EMAILS_BLOQUEADOS = "bloqueado@teste.dev";
 process.env.CONTAS_NOVAS_POR_DIA = "1000";
+// Selo (regra 11.10): certificado autoassinado gerado na hora; sem TSA (os testes não saem da máquina).
+const seal = testSealCredentials();
+process.env.SELO_P12_BASE64 = seal.p12Base64;
+process.env.SELO_P12_SENHA = seal.password;
+delete process.env.SELO_TSA_URL;
+process.env.ADMIN_EMAIL = "admin@assina.test";
 
 // Espera o Supabase local responder antes dos testes (até 60 s).
 async function waitForLocalSupabase(timeoutMs = 60000): Promise<void> {

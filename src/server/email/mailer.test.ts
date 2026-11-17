@@ -8,6 +8,10 @@ describe("cabeçalho From", () => {
     expect(fromHeader("Ana Souza")).toBe('"Ana Souza via Assina" <naoresponda@assina.app.br>');
   });
 
+  it("e-mail da própria plataforma (sem nome): só Assina, sem \"via\"", () => {
+    expect(fromHeader()).toBe('"Assina" <naoresponda@assina.app.br>');
+  });
+
   it.each([
     ["Silva, Ana", '"Silva, Ana via Assina"'],
     ['Ana "Aninha" <x@y>', '"Ana Aninha x@y via Assina"'],

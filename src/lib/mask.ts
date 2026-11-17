@@ -7,3 +7,10 @@ export function maskEmail(email: string): string {
   if (!user || !domain) return "***";
   return `${user[0]}***@${domain}`;
 }
+
+// Mascara um CPF (regra 11.9): "52998224725" → "***.982.247-**". Devolve "***" se não tiver 11 dígitos.
+export function maskCpf(cpf: string): string {
+  const d = cpf.replace(/\D/g, "");
+  if (d.length !== 11) return "***";
+  return `***.${d.slice(3, 6)}.${d.slice(6, 9)}-**`;
+}

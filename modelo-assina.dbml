@@ -184,6 +184,9 @@ Table as_envelopes {
   codigo_verificacao text [not null, unique, note: '12 caracteres base32 Crockford (11.11)']
   chave_idempotencia text [note: 'nulo fora da API']
   tentativas_finalizacao smallint [not null, default: 0]
+  finalizacao_reserva uuid [note: 'id da reserva de quem está finalizando (8.6)']
+  finalizacao_reservada_em timestamptz [note: 'desde quando vale a reserva; vence em 5 min']
+  erro_finalizacao text [note: 'código técnico da última falha (8.6), sem dado pessoal']
   motivo_cancelamento text [note: 'máx. 500; só em cancelado']
   enviado_em timestamptz
   concluido_em timestamptz
