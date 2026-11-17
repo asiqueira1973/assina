@@ -4,7 +4,7 @@ Descreve o sistema **como está implementado**, não como foi planejado (spec.md
 
 | | |
 |---|---|
-| Estado | Épicos 8.0 a 8.6 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
+| Estado | Épicos 8.0 a 8.7 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
 | Stack | Next.js 16.4.6 (App Router, Cache Components, `proxy.ts`), React 19.3, TypeScript, Supabase Postgres (projeto compartilhado, prefixo `as_`), Vitest, pgTAP |
 
 ---
@@ -86,6 +86,12 @@ Fonte: `supabase/migrations/20261117130100_as_logica.sql`. Toda função com `se
 | `as_fn_recusa` | função | envelope, signatário, trilha, notificações, webhooks | recusar | envelope recusado e encerrado; avisos; webhook na fila |
 | `as_fn_reserva_finalizacao` | função | envelope, notificações | finalizar | um finalizador por vez, com id de reserva; conta a tentativa; esgotado sem alerta → enfileira o alerta |
 | `as_fn_alerta_finalizacao` | função | `as_notificacoes` | finalizar | alerta ao admin uma vez só |
+| `as_fn_lista_envelopes` | função | envelopes, signatários | `/painel` | filtros, busca escapada, progresso e total, sempre da conta |
+| `as_fn_signatario_ativo` | função | envelope, signatário | lembrar, copiar link | trava e confere que o signatário está aguardando num envelope enviado da conta |
+| `as_fn_reserva_lembrete` · `as_fn_confirma_lembrete` · `as_fn_desfaz_lembrete` | funções | signatário, notificações, trilha | Lembrar | 1 a cada 24 h, até 10; o link só muda se o e-mail saiu |
+| `as_fn_copia_link` | função | signatário, trilha | Copiar link | link novo e `convite_enviado` `{canal: link_copiado}` |
+| `as_fn_cancela_envelope` | função | envelope, trilha, notificações, webhooks | Cancelar | `enviado → cancelado`, avisos e webhook |
+| `as_fn_exclui_envelope` | função | envelope (cascata) | Excluir | 7.4: status e título conferidos |
 | `as_fn_conclui_envelope` | função | envelope, trilha, notificações, webhooks | finalizar | `finalizando → concluido` com hash, selo e caminho; eventos `finalizado` e `concluido`; e-mails de conclusão e webhook na mesma transação |
 | `as_fn_falha_finalizacao` | função | envelope, notificações | finalizar | registra a falha só da própria reserva; na 3ª tentativa (ou na `integridade_violada`), alerta ao admin |
 | `as_tg_final_imutavel` | trigger | `as_envelopes` | — | o resultado da finalização não se reescreve |
@@ -93,7 +99,7 @@ Fonte: `supabase/migrations/20261117130100_as_logica.sql`. Toda função com `se
 
 Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `envelope_congelado`, `envelope_em_andamento`, `status_mudou`, `campo_invalido`, `campos_demais`, `status_mudou`, `envelope_mudou`, `sem_assinante`, `limite_diario`, `limite_do_nivel`, `nao_encontrado`, `email_repetido`, `assinantes_demais`, `copias_demais`).
 
-## 4. Mapa tela → tabelas (até o 8.6)
+## 4. Mapa tela → tabelas (até o 8.7)
 
 | Tela / rota | Lê | Escreve | Passa por |
 |---|---|---|---|
@@ -102,7 +108,7 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | `GET /api/auth/google/callback` | `as_contas` (situação, contagem de 24 h) | `as_contas`, `as_credenciais` | `as_fn_entra_conta` |
 | Painel (layout), boas-vindas | `as_contas` | — | `getCurrentAccount` |
 | `POST /api/painel/conta/boas-vindas` | `as_contas` | `as_contas.termos_aceitos_em` | `requireConta` |
-| `/painel` (Envelopes, estado vazio) | — | — | — |
+| `/painel` (Envelopes: filtros, busca, paginação) | `as_envelopes`, `as_signatarios` | — | `listEnvelopes` → `as_fn_lista_envelopes` |
 | `/painel/conta` | `as_contas` | — | `getCurrentAccount` |
 | `POST /sair` | — | apaga o cookie | confere o Origin |
 | `/painel/envelopes/novo` | — | via as rotas abaixo | — |
@@ -116,7 +122,10 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | `PUT /api/painel/envelopes/{id}/campos` | — | `as_campos` | `requireConta`, `as_fn_substitui_campos` |
 | `/painel/envelopes/{id}/revisar` | `as_envelopes`, `as_signatarios`, `as_campos`, arquivo original | — | `getCurrentAccount` |
 | `POST /api/painel/envelopes/{id}/enviar` | arquivo original | `as_envelopes`, `as_signatarios`, `as_eventos`, `as_notificacoes` | `requireConta`, `validatePdf`, `as_fn_envia_envelope`, `sendInvite` |
-| `/painel/envelopes/{id}` (detalhe mínimo) | `as_envelopes`, `as_signatarios`, `as_notificacoes` | — | `getCurrentAccount` |
+| `/painel/envelopes/{id}` (detalhe) | `as_envelopes`, `as_signatarios`, `as_notificacoes`, `as_eventos` (linha do tempo e `as_fn_verifica_trilha`) | via as rotas abaixo | `getEnvelope`, `getSigners`, `getTrail`, `invitesWithProblem` |
+| `POST …/{id}/signatarios/{sid}/lembrar` · `…/link` | — | signatário, notificações, trilha | `remindSigner`, `copySignerLink` |
+| `POST …/{id}/cancelar` · `DELETE /api/painel/envelopes/{id}` | — | via `as_fn_cancela_envelope` / `as_fn_exclui_envelope`; a exclusão apaga a pasta no armazenamento | `cancelEnvelope`, `deleteEnvelope` |
+| `GET …/{id}/arquivo?versao=` · `GET …/{id}/trilha.csv` | envelope, trilha | `as_eventos` (`baixou_*`) | `downloadUrl`, `getTrail`, `trailCsv` |
 | `POST /api/painel/envelopes/{id}/signatarios/{sid}/convite` | `as_signatarios`, `as_notificacoes` | `as_signatarios` (token), `as_notificacoes`, `as_eventos` | `requireConta`, `sendInvite` |
 | `/painel` e `/painel/conta` (uso do nível) | `as_envelopes` (contagem) | — | `getUsage` |
 | `/assinar/{token}` (signatário) | `as_signatarios`, `as_envelopes`, `as_contas`, `as_campos` | via as rotas abaixo | `loadSignerByToken`, `signerPageState` |
@@ -148,6 +157,11 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
   - "Recusar" chama `decline` (`as_fn_recusa`) e manda os avisos;
   - "visualizou" sai quando a primeira página aparece, uma vez por sessão (pelo `jti`).
 - **Avisos por e-mail:** `src/server/notifications/notices.ts` manda `assinou_remetente`, `recusado_remetente` e `recusado_destinatario` com a mesma reserva do convite; `retryFailedNotices` é a parte da faxina (rota no 8.13).
+- **Painel (`src/server/envelopes/manage.ts`, épico 8.7):** a lista é lida no servidor (`?filtro=&q=&pagina=`; filtro desconhecido vira "todos"), com o esqueleto no Suspense e os estados vazios da seção 15. O detalhe mostra ações por destinatário (Lembrar, Copiar link) e do envelope (downloads, Exportar trilha, Cancelar, Excluir) em componentes de cliente que chamam as rotas e releem a página (`router.refresh`).
+  - **Lembrete manual:** reserva no banco, e-mail com link novo e confirmação. Se o e-mail falha, desfaz, e o link antigo continua.
+  - **Copiar link:** sem permissão de área de transferência, o link aparece selecionado num campo, com o aviso.
+  - **Excluir:** o servidor confere o título (no rascunho ele pode ter mudado depois de a tela carregar). O banco apaga em cascata, e depois `storage().deletePrefix("{conta}/{id}/")` limpa os arquivos; se isso falhar, fica `arquivos_nao_apagados` no log. O rascunho tem o "Excluir" no fim da tela de edição.
+  - **CSV da trilha:** BOM, `;`, CRLF, aspas quando preciso, e um apóstrofo antes de `=`, `+`, `-` e `@` (injeção de fórmula).
 - **Finalização (`src/server/envelopes/finalize.ts`):** `finalizeEnvelope(id)` reserva o envelope (com id de reserva; a tentativa conta ali, então um timeout também conta), lê o original e confere o SHA-256 (se não bater: `integridade_violada`, falha definitiva com alerta ao admin), grava os campos (`src/server/pdf/stamp.ts`), anexa o manifesto (`src/server/pdf/manifest.ts`), sela (`src/server/pdf/seal.ts`), sobe `{conta}/{id}/final-{reserva}.pdf` e chama `as_fn_conclui_envelope` com a reserva. Um finalizador atrasado (reserva vencida e tomada) não conclui, não registra falha e não grava por cima do final de ninguém; o arquivo dele é apagado. Depois do commit, manda os e-mails de conclusão. Qualquer exceção vira `as_fn_falha_finalizacao` com o código do erro, e a função nunca lança. `retryFinalizations` é a parte da faxina (rota no 8.13).
   - **Campos (11.3):** a fração gravada pelo editor é a da página como o pdf.js a mostra (CropBox, já girada). `fieldFrame` desfaz essa conta para os quatro giros, e o teste compara com `viewport.convertToPdfPoint` do próprio pdf.js. Assinatura e rubrica digitadas saem em "Dancing Script" embutida (subconjunto, `@pdf-lib/fontkit`); as desenhadas, como PNG com a proporção preservada; texto, data e nome em Helvetica 10 pt numa linha; a caixa marcada vira um ✓ em dois traços.
   - **Texto no PDF:** tudo passa por `safeText` (`src/server/pdf/fonts.ts`), porque a Helvetica padrão só codifica WinAnsi e um caractere fora dele quebraria o `drawText`.
@@ -176,7 +190,7 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | 12 | Ordem dos assinantes como exclusion constraint diferida, e não índice único parcial (spec v0.5) | Reordenar dentro de uma transação colidia no índice |
 | 13 | Clicar num tipo da paleta também cria o campo (além de arrastar) | Caminho do teclado e do toque; arrastar e soltar nativo não existe no toque |
 | 14 | Reenviar convite gera um link novo, e o anterior deixa de valer | O banco guarda só o hash do token (6.2); o token em claro não existe depois do envio |
-| 15 | Detalhe do envelope em versão mínima (status, destinatários, faixa de convite que falhou) | O 8.4 exige a faixa no detalhe; trilha, ações e downloads são do 8.7 |
+| 15 | ~~Detalhe do envelope em versão mínima~~ | Resolvida no 8.7 |
 | 16 | E-mail em dev numa caixa local (`.caixa-de-saida-local/`) | Ainda não há chave do Resend (PENDENCIAS P5) |
 | 17 | Cookie do signatário com `Path=/` (spec v0.8) | Com `/assinar`, o cookie não chegaria às rotas `/api/assinar/...` |
 | 18 | Webhook `envelope.recusado` só fica na fila do banco | A entrega HTTP é do épico 8.9 |
@@ -190,4 +204,7 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | 26 | Webhook `signatario.assinou` ainda não é enfileirado | Fica com a entrega HTTP no 8.9; `envelope.concluido` e `envelope.recusado` já vão para a fila |
 | 27 | Abrir o `final.pdf` no Adobe Reader e no Preview (critério 8.6) ainda não foi feito | Esta máquina não tem o Adobe Reader; o selo foi conferido pelo `openssl cms -verify` e pelos testes. Fica na `PENDENCIAS.md` (P6) |
 | 28 | O final fica em `final-{reserva}.pdf`, e não em `final.pdf` (spec v0.9) | Com o caminho da tentativa, um finalizador atrasado nunca sobrescreve o final de um envelope concluído (achado do verifier) |
-| 29 | Migrations ainda não aplicadas no remoto | O hook `guard-production.sh` da sessão em que o épico foi feito (pasta do agenda-psi) bloqueou o `apply_migration`; aguardando o Alexandre |
+| 29 | Lembrete manual e "Copiar link" trocam o link do signatário; quem estiver no meio da assinatura com o link anterior perde a sessão | O banco só tem o hash do link: o e-mail do lembrete precisa de um link novo. No lembrete, a troca só acontece se o e-mail saiu |
+| 30 | Busca da lista compara com `ilike` (maiúsculas e minúsculas), mas não ignora acento | Sem a extensão `unaccent` no projeto compartilhado; "servico" não acha "serviço" |
+| 31 | CSV da trilha põe um apóstrofo antes de valores que começam com `=`, `+`, `-` ou `@` | Proteção contra injeção de fórmula na planilha; a seção 14 não pedia |
+| 32 | Migrations ainda não aplicadas no remoto | O hook `guard-production.sh` da sessão em que o épico foi feito (pasta do agenda-psi) bloqueou o `apply_migration`; aguardando o Alexandre |

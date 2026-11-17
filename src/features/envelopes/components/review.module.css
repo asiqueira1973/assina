@@ -30,3 +30,9 @@
 .code { margin: 0 0 20px; font-size: 14px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 @media (max-width: 600px) { .settings { grid-template-columns: 1fr; } }
 .inlineError { flex-basis: 100%; order: 3; font-size: 14px; color: var(--red); }
+/* Celular (critério 8.7): o status desce para baixo do nome, sem espremer nome e e-mail. */
+@media (max-width: 600px) {
+  .person { flex-wrap: wrap; align-items: flex-start; }
+  .personText { flex-basis: calc(100% - 36px); }
+  .side { flex-basis: 100%; padding-left: 36px; white-space: normal; }
+}

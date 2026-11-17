@@ -3,6 +3,7 @@
 import "server-only";
 import { after, type NextRequest } from "next/server";
 import { DraftError, type RequestMeta } from "@/server/envelopes/drafts";
+import { errorCode } from "@/server/error-code";
 
 const PDF_CODES = new Set(["nao_e_pdf", "grande_demais", "paginas_demais", "protegido_por_senha", "pagina_grande_demais", "arquivo_ausente"]);
 
@@ -29,15 +30,17 @@ export function invalidData(): Response {
 export function errorResponse(e: unknown): Response {
   if (e instanceof DraftError) {
     if (e.code === "nao_encontrado") return Response.json({ codigo: "nao_encontrado" }, { status: 404 });
-    if (e.code === "envelope_congelado" || e.code === "status_mudou" || e.code === "envelope_mudou" || e.code === "convite_indisponivel") {
+    if (e.code === "envelope_congelado" || e.code === "status_mudou" || e.code === "envelope_mudou" || e.code === "convite_indisponivel" || e.code === "limite_lembretes" || e.code === "prazo_encerrado") {
       return Response.json({ codigo: e.code }, { status: 409 });
     }
-    // Seção 13.2: limites respondem 429.
-    if (e.code === "limite_diario" || e.code === "limite_do_nivel") return Response.json({ codigo: e.code }, { status: 429 });
+    if (e.code === "arquivo_indisponivel") return Response.json({ codigo: e.code }, { status: 404 });
+    if (e.code === "email_falhou") return Response.json({ codigo: e.code }, { status: 502 });
+    // Seção 13.2: limites respondem 429 (o lembrete manual também, regra 11.5).
+    if (e.code === "limite_diario" || e.code === "limite_do_nivel" || e.code === "lembrete_recente") return Response.json({ codigo: e.code }, { status: 429 });
     if (PDF_CODES.has(e.code)) return Response.json({ codigo: "arquivo_invalido", motivo: e.code }, { status: 400 });
     return Response.json({ codigo: e.code }, { status: 400 });
   }
-  console.error("erro_interno", e instanceof Error ? e.message : "erro");
+  console.error("erro_interno", errorCode(e));
   return Response.json({ codigo: "erro_interno" }, { status: 500 });
 }
 

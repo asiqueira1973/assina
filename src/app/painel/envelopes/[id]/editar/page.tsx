@@ -1,10 +1,11 @@
 // [Remetente] Editar rascunho — épico 8.2, passos 4 a 7: arquivo, título, mensagem, quem recebe,
 // ordem, prazo e lembrete, com salvamento automático. Lê só o envelope da conta da sessão
-// (outra conta → 404). Envelope que já saiu de rascunho não se edita (princípio 2): volta à lista
-// até o detalhe existir (8.7).
+// (outra conta → 404). Envelope que já saiu de rascunho não se edita (princípio 2): vai para o
+// detalhe. "Excluir" do rascunho fica no fim da página (seção 7.4, épico 8.7).
 import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import { DraftEditor } from "@/features/envelopes/components/draft-editor";
+import { EnvelopeActions } from "@/features/envelopes/components/envelope-actions";
 import draft from "@/features/envelopes/components/draft.module.css";
 import { getCurrentAccount } from "@/server/auth/require-conta";
 import { getEnvelope, getSigners } from "@/server/envelopes/drafts";
@@ -21,11 +22,12 @@ async function Editor({ params, searchParams }: Props) {
   const { id } = await params;
   const envelope = await getEnvelope(account.id, id);
   if (!envelope) notFound();
-  if (envelope.status !== "rascunho") redirect("/painel");
+  if (envelope.status !== "rascunho") redirect(`/painel/envelopes/${id}`);
   const signers = await getSigners(account.id, id);
   const { aviso } = await searchParams;
 
   return (
+    <>
     <DraftEditor
       envelopeId={envelope.id}
       initialSettings={{
@@ -39,6 +41,8 @@ async function Editor({ params, searchParams }: Props) {
       initialSigners={signers.map((s) => ({ key: s.id, nome: s.nome, email: s.email, papel: s.papel, exigir_cpf: s.exigir_cpf }))}
       alreadySigned={aviso === "ja_assinado"}
     />
+    <EnvelopeActions envelopeId={envelope.id} titulo={envelope.titulo} canDownloadOriginal={false} canDownloadSigned={false} canCancel={false} canDelete canExport={false} />
+    </>
   );
 }
 

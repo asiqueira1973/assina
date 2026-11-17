@@ -95,3 +95,10 @@ export const TSA_TIMEOUT_MS = 5000; // regra 11.10
 export const FINALIZACAO_TENTATIVAS = 3; // regra 11.10: a do momento + 2 da faxina
 export const ANEXO_EMAIL_MAX_BYTES = 7 * 1024 * 1024; // critério 8.6: PDF anexo até 7 MB
 export const CAMPO_TEXTO_PT = 10; // regra 11.3: texto em Helvetica 10 pt
+
+// Painel (épico 8.7, regras 11.5 e seção 8.7).
+export const ENVELOPES_POR_PAGINA = 30; // critério 8.7
+export const LEMBRETE_MANUAL_INTERVALO_H = 24; // regra 11.5
+export const MAX_LEMBRETES = 10; // regra 11.5
+export const BUSCA_MAX = 100; // tamanho da busca da lista
+export const MOTIVO_CANCELAMENTO_MAX = 500; // coluna motivo_cancelamento

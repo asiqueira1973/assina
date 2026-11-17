@@ -9,7 +9,7 @@ import { ANEXO_EMAIL_MAX_BYTES, MAX_TENTATIVAS_EMAIL } from "@/lib/limits";
 import { db } from "@/server/db/client";
 import { errorCode } from "@/server/error-code";
 import { mailer, type EmailMessage } from "@/server/email/mailer";
-import { completedEmail, declinedRecipientEmail, declinedSenderEmail, finalizationFailedEmail, signedNoticeEmail } from "@/server/email/templates";
+import { canceledRecipientEmail, completedEmail, declinedRecipientEmail, declinedSenderEmail, finalizationFailedEmail, signedNoticeEmail } from "@/server/email/templates";
 import { finalDownloadLink } from "@/server/envelopes/final-link";
 import { storage } from "@/server/files/storage";
 
@@ -20,6 +20,7 @@ const NOTICE_TYPES = [
   "concluido_destinatario",
   "concluido_remetente",
   "finalizacao_falhou_admin",
+  "cancelado_destinatario",
 ] as const;
 
 // O PDF final para anexar, se tiver até 7 MB (critério 8.6). Devolve: os bytes ou null (maior).
@@ -91,6 +92,10 @@ async function buildNotice(note: { tipo: string; envelope_id: string | null; sig
   }
   if (note.tipo === "recusado_remetente") {
     return { ...toSender, ...declinedSenderEmail({ nome: s.nome, titulo: e.titulo, motivo: s.motivo_recusa ?? "", link }) };
+  }
+  if (note.tipo === "cancelado_destinatario") {
+    const { data: env } = await db().from("as_envelopes").select("motivo_cancelamento").eq("id", e.id).single();
+    return { to: s.email, fromName: e.as_contas.nome, replyTo: e.as_contas.email, ...canceledRecipientEmail({ titulo: e.titulo, motivo: env?.motivo_cancelamento ?? null }) };
   }
   if (note.tipo === "recusado_destinatario") {
     return { to: s.email, fromName: e.as_contas.nome, replyTo: e.as_contas.email, ...declinedRecipientEmail({ titulo: e.titulo }) };

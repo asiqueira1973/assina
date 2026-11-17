@@ -18,3 +18,8 @@ export function formatDateTimeSeconds(iso: string | Date): string {
     .format(new Date(iso))
     .replace(",", "");
 }
+
+// "17/12/2026" no horário de Brasília (linha secundária da lista, critério 8.7).
+export function formatDateShort(iso: string | Date): string {
+  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: TZ }).format(new Date(iso));
+}

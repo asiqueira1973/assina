@@ -39,14 +39,16 @@ type SignerSpec = { nome: string; email: string; papel?: string; exigir_cpf?: bo
 export async function sentEnvelope(
   accounts: string[],
   signatarios: SignerSpec[],
-  opts: { pdf?: Uint8Array; emOrdem?: boolean; campos?: (ids: Record<string, string>) => unknown[] } = {},
+  opts: { pdf?: Uint8Array; emOrdem?: boolean; campos?: (ids: Record<string, string>) => unknown[]; account?: { id: string; cookie: string }; nomeArquivo?: string } = {},
 ) {
-  const a = await createTestAccount({ accepted: true });
-  accounts.push(a.id);
-  const res = await createEnvelope(apiRequest("/api/painel/envelopes", { method: "POST", cookie: a.cookie, body: { nome_arquivo: "Contrato.pdf" } }));
+  // Conta nova por envelope, ou uma conta já criada (vários envelopes na mesma lista).
+  const a = opts.account ?? (await createTestAccount({ accepted: true }));
+  if (!opts.account) accounts.push(a.id);
+  const nome = opts.nomeArquivo ?? "Contrato.pdf";
+  const res = await createEnvelope(apiRequest("/api/painel/envelopes", { method: "POST", cookie: a.cookie, body: { nome_arquivo: nome } }));
   const { envelope, upload_url } = await res.json();
   await uploadTo(upload_url, opts.pdf ?? (await makePdf(1)));
-  expect((await attachFile(apiRequest("/x", { method: "POST", cookie: a.cookie, body: { nome_arquivo: "Contrato.pdf" } }), pctx(envelope.id))).status).toBe(200);
+  expect((await attachFile(apiRequest("/x", { method: "POST", cookie: a.cookie, body: { nome_arquivo: nome } }), pctx(envelope.id))).status).toBe(200);
   const put = await putSigners(apiRequest("/x", { method: "PUT", cookie: a.cookie, body: { signatarios } }), pctx(envelope.id));
   const byEmail = Object.fromEntries(((await put.json()).signatarios as { id: string; email: string }[]).map((s) => [s.email, s.id]));
   if (opts.emOrdem) await PATCH(apiRequest("/x", { method: "PATCH", cookie: a.cookie, body: { em_ordem: true } }), pctx(envelope.id));

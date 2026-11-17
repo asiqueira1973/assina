@@ -1,0 +1,35 @@
+/* Lista de envelopes (seção 16, critério 8.7): cartões cinza de cantos 18 px, sem borda, 12 px
+   entre eles; título semibold, linha secundária, pílula de status e ação branca em pílula. */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.filter { display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 14px; border-radius: 999px; color: var(--text); font-size: 15px; font-weight: 500; }
+.filter:hover { background: var(--surface); }
+.filterActive { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.search { display: flex; gap: 8px; flex: 1; min-width: 220px; max-width: 360px; }
+.searchInput { flex: 1; min-width: 0; min-height: var(--tap); padding: 0 14px; border: 1px solid var(--hairline); border-radius: 999px; background: var(--bg); color: var(--text); font: inherit; font-size: 15px; }
+.searchButton { min-height: var(--tap); padding: 0 16px; border: 1px solid var(--hairline); border-radius: 999px; background: var(--bg); color: var(--text); font-size: 15px; font-weight: 600; cursor: pointer; }
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; align-items: center; gap: 16px; padding: 16px 20px; border-radius: var(--radius-row); background: var(--surface); color: var(--text); }
+.row:hover { filter: brightness(0.98); }
+.rowText { flex: 1; min-width: 0; }
+.rowTitle { margin: 0; font-size: 17px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rowMeta { margin: 2px 0 0; font-size: 14px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.open { display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); padding: 0 14px; border-radius: 999px; background: var(--bg); color: var(--text); font-size: 14px; font-weight: 600; }
+.pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px; font-size: 14px; color: var(--text-secondary); }
+.pagerLink { display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 16px; border: 1px solid var(--hairline); border-radius: 999px; color: var(--text); font-weight: 600; }
+.pagerOff { visibility: hidden; }
+.flash { margin: 0 0 16px; padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--green) 14%, transparent); font-weight: 600; }
+
+/* Esqueleto com a forma da lista (seção 17: nunca cartões zerados). */
+.skeleton { height: 74px; border-radius: var(--radius-row); background: var(--surface); position: relative; overflow: hidden; }
+.skeleton::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--bg) 40%, transparent), transparent); animation: shimmer 1.4s infinite; }
+@keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .skeleton::after { animation: none; } }
+
+@media (max-width: 600px) {
+  .row { flex-wrap: wrap; gap: 8px 12px; padding: 14px 16px; }
+  .rowText { flex-basis: 100%; }
+  .rowTitle { white-space: normal; }
+  .open { margin-left: auto; }
+  .search { max-width: none; }
+}

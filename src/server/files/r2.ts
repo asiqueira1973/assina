@@ -5,7 +5,9 @@ import "server-only";
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -62,6 +64,19 @@ export function r2StorageDriver(config: R2Config): ArquivoStorage {
     },
     async delete(path) {
       await client.send(new DeleteObjectCommand({ Bucket, Key: path }));
+    },
+    async deletePrefix(prefix) {
+      if (!prefix.endsWith("/") || prefix.length < 3) throw new Error("caminho_invalido");
+      // Lista e apaga de 1.000 em 1.000 (limite do DeleteObjects).
+      for (;;) {
+        const list = await client.send(new ListObjectsV2Command({ Bucket, Prefix: prefix, MaxKeys: 1000 }));
+        const keys = (list.Contents ?? []).flatMap((o) => (o.Key ? [{ Key: o.Key }] : []));
+        if (!keys.length) return;
+        const res = await client.send(new DeleteObjectsCommand({ Bucket, Delete: { Objects: keys, Quiet: true } }));
+        // Falha parcial: para aqui (senão a próxima listagem traria as mesmas chaves para sempre).
+        if (res.Errors?.length) throw new Error("arquivos_nao_apagados");
+        if (!list.IsTruncated) return;
+      }
     },
   };
 }

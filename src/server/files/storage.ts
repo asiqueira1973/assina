@@ -21,6 +21,8 @@ export interface ArquivoStorage {
   /** Move (copia e apaga a origem). Usado para promover upload.pdf a original.pdf. */
   move(from: string, to: string): Promise<void>;
   delete(path: string): Promise<void>;
+  /** Apaga tudo sob a pasta (exclusão do envelope, seção 7.4). O prefixo termina em "/". */
+  deletePrefix(prefix: string): Promise<void>;
 }
 
 let cached: ArquivoStorage | null = null;
@@ -53,6 +55,7 @@ export function envelopePaths(contaId: string, envelopeId: string) {
   return {
     upload: `${base}/upload.pdf`,
     original: (version: string) => `${base}/original-${version}.pdf`,
-    final: `${base}/final.pdf`,
+    // Pasta do envelope, para a exclusão (7.4). O final fica em final-{reserva}.pdf (8.6).
+    folder: `${base}/`,
   };
 }

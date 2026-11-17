@@ -109,3 +109,27 @@ export function finalizationFailedEmail(p: { envelopeId: string; erro: string })
     text: [subject, "", body].join("\n"),
   };
 }
+
+// Lembrete (seção 15.2, tipo lembrete): "Vence em {n} dias." e o botão de assinar.
+export function reminderEmail(p: { titulo: string; dias: number; prazo: string; link: string }): RenderedEmail {
+  const r = copy.emailNotices.reminder;
+  const subject = r.subject(p.titulo);
+  const due = p.dias >= 1 ? r.dueIn(p.dias) : r.deadline(p.prazo);
+  return {
+    subject,
+    html: layout(subject, [esc(due)], { label: copy.email.invite.button, url: p.link }),
+    text: [subject, "", due, "", `${copy.email.invite.button}: ${p.link}`, "", copy.email.footer].join("\n"),
+  };
+}
+
+// Aviso aos convidados: o envelope foi cancelado, com o motivo se houver (cancelado_destinatario).
+export function canceledRecipientEmail(p: { titulo: string; motivo: string | null }): RenderedEmail {
+  const c = copy.emailNotices.canceledRecipient;
+  const subject = c.subject(p.titulo);
+  const lines = [c.body, ...(p.motivo ? [c.reason(p.motivo)] : [])];
+  return {
+    subject,
+    html: layout(subject, lines.map((l) => esc(l).replace(/\n/g, "<br>"))),
+    text: [subject, "", ...lines, "", copy.email.footer].join("\n"),
+  };
+}

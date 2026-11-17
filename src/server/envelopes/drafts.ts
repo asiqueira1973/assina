@@ -47,6 +47,12 @@ export class DraftError extends Error {
       | "limite_diario"
       | "limite_do_nivel"
       | "convite_indisponivel"
+      | "lembrete_recente"
+      | "prazo_encerrado"
+      | "limite_lembretes"
+      | "titulo_nao_confere"
+      | "email_falhou"
+      | "arquivo_indisponivel"
       | PdfErrorCode,
   ) {
     super(code);

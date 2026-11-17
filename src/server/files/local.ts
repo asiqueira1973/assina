@@ -73,5 +73,9 @@ export function localStorageDriver(): ArquivoStorage {
     async delete(path) {
       await rm(localFilePath(path), { force: true });
     },
+    async deletePrefix(prefix) {
+      if (!prefix.endsWith("/") || prefix.length < 3) throw new Error("caminho_invalido");
+      await rm(localFilePath(prefix.slice(0, -1)), { recursive: true, force: true });
+    },
   };
 }

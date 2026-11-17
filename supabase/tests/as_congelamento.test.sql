@@ -77,11 +77,11 @@ select throws_ok($$delete from public.as_envelopes where id = '00000000-0000-000
   'P0001', 'envelope_em_andamento', 'envelope enviado não se exclui (7.4: primeiro cancela)');
 select throws_ok(
   $$insert into public.as_envelopes (conta_id, titulo, origem, codigo_verificacao, status)
-    values ('00000000-0000-0000-0000-0000000000a2', 'Pulo', 'api', 'PULO1234PULO', 'concluido')$$,
+    values ('00000000-0000-0000-0000-0000000000a2', 'Pulo', 'api', 'PVZA1234PVZA', 'concluido')$$,
   'P0001', 'status_mudou', 'envelope não nasce fora de rascunho');
 select throws_ok(
   $$insert into public.as_envelopes (conta_id, titulo, origem, codigo_verificacao, hash_original)
-    values ('00000000-0000-0000-0000-0000000000a2', 'Pulo', 'api', 'PULO1234PULO', repeat('c', 64))$$,
+    values ('00000000-0000-0000-0000-0000000000a2', 'Pulo', 'api', 'PVZA1234PVZA', repeat('c', 64))$$,
   'P0001', 'status_mudou', 'envelope não nasce com hash do original');
 select is(public.as_fn_transicao_envelope('00000000-0000-0000-0000-0000000000e3', 'enviado', 'cancelado'), true,
   'enviado → cancelado');

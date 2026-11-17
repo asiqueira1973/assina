@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Versão | 0.9 (17/11/2026: épico 8.6 — colunas `finalizacao_reservada_em` e `erro_finalizacao`, funções da finalização e trigger do final imutável; textos do e-mail de conclusão; caracteres fora do WinAnsi no PDF) · 0.8 (17/11/2026: épico 8.5 — funções do código, assinar e recusar; textos extras do signatário; cookie do signatário com Path=/) · 0.7 (17/11/2026: épico 8.4 — `as_fn_envia_envelope`, textos do revisar e do uso do nível) · 0.6 (17/11/2026: épico 8.3 — `as_fn_substitui_campos`, textos do editor) · 0.5 (17/11/2026: épico 8.2 — textos do rascunho na seção 15; `as_fn_cria_rascunho`, `as_fn_substitui_signatarios`, ordem diferida e rota `/upload`) · 0.4 (17/11/2026: épico 8.1 — canônico da trilha em linhas (11.6), `as_fn_entra_conta` e congelamento refinado (7.5)) · 0.3 (17/11/2026: arquivos no Cloudflare R2, fora do Supabase; 25.3 respondida) · 0.2 (17/11/2026: níveis 1, 2 e 3 com limite de documentos, regra 11.20; armazenamento atrás de uma interface única, seção 18) · 0.1 (17/11/2026: nome Assina, domínio assina.app.br; nome de trabalho anterior "Firma" descartado porque firma.app.br já tinha dono) |
+| Versão | 0.10 (17/11/2026: épico 8.7 — funções da lista, do lembrete manual, do link copiado, do cancelamento e da exclusão; `deletePrefix` no armazenamento; textos da lista e do detalhe; e-mails `lembrete` e `cancelado_destinatario`) · 0.9 (17/11/2026: épico 8.6 — colunas `finalizacao_reservada_em` e `erro_finalizacao`, funções da finalização e trigger do final imutável; textos do e-mail de conclusão; caracteres fora do WinAnsi no PDF) · 0.8 (17/11/2026: épico 8.5 — funções do código, assinar e recusar; textos extras do signatário; cookie do signatário com Path=/) · 0.7 (17/11/2026: épico 8.4 — `as_fn_envia_envelope`, textos do revisar e do uso do nível) · 0.6 (17/11/2026: épico 8.3 — `as_fn_substitui_campos`, textos do editor) · 0.5 (17/11/2026: épico 8.2 — textos do rascunho na seção 15; `as_fn_cria_rascunho`, `as_fn_substitui_signatarios`, ordem diferida e rota `/upload`) · 0.4 (17/11/2026: épico 8.1 — canônico da trilha em linhas (11.6), `as_fn_entra_conta` e congelamento refinado (7.5)) · 0.3 (17/11/2026: arquivos no Cloudflare R2, fora do Supabase; 25.3 respondida) · 0.2 (17/11/2026: níveis 1, 2 e 3 com limite de documentos, regra 11.20; armazenamento atrás de uma interface única, seção 18) · 0.1 (17/11/2026: nome Assina, domínio assina.app.br; nome de trabalho anterior "Firma" descartado porque firma.app.br já tinha dono) |
 | Responsável de produto | Alexandre Siqueira (DabLab) |
 | Status | pronto para revisão |
 | Data | 17/11/2026 |
@@ -524,6 +524,12 @@ as_contas 1 ──── N as_credenciais N ──── 0..1 as_oauth_clientes 
 | `as_fn_conclui_envelope(envelope_id, reserva, caminho, hash_final, selo, concluido_em)` | função | `as_envelopes`, `as_eventos`, `as_notificacoes`, `as_entregas_webhook` | conclusão numa transação (critério 8.6, passos 6 a 9): confere que a reserva é de quem chama e o caminho `{conta}/{id}/final-{reserva}.pdf`; `finalizando → concluido`; eventos `finalizado` e `concluido`; e-mails `concluido_destinatario` (assinantes e cópias) e `concluido_remetente`; webhook `envelope.concluido` |
 | `as_fn_falha_finalizacao(envelope_id, reserva, erro, max_tentativas, definitiva)` | função | `as_envelopes`, `as_notificacoes` | registra a falha da própria reserva (regra 11.10; a de um finalizador atrasado é ignorada), solta a reserva e guarda o código; se era a última tentativa (ou numa falha definitiva, como `integridade_violada`), enfileira `finalizacao_falhou_admin` |
 | `as_tg_final_imutavel` | trigger | `as_envelopes` | depois de preenchidos, `hash_final`, `arquivo_final_path`, `selo` e `concluido_em` não mudam (`envelope_congelado`) |
+| `as_fn_lista_envelopes(conta, filtro, busca, limite, deslocamento)` | função | `as_envelopes`, `as_signatarios` | lista do painel (critério 8.7): filtros da seção 15, busca por título ou e-mail (com `%` e `_` como texto), "n de m assinaram" e o total para paginar; mais recentes primeiro |
+| `as_fn_signatario_ativo(conta, envelope, signatario)` | função | `as_envelopes`, `as_signatarios` | trava e confere o signatário aguardando num envelope enviado da conta e dentro do `prazo_em` (`nao_encontrado` / `status_mudou` / `prazo_encerrado`); usada pelo lembrete e pelo link copiado |
+| `as_fn_reserva_lembrete` · `as_fn_confirma_lembrete` · `as_fn_desfaz_lembrete` | funções | `as_signatarios`, `as_notificacoes`, `as_eventos` | lembrete manual (regra 11.5) em três passos: reserva (1 a cada 24 h, até 10; `lembrete_recente` / `limite_lembretes`; notificação `lembrete:{sid}:{uuid}`, uma por tentativa), e-mail com link novo, confirmação (registra o envio e `lembrete_enviado` com `{"canal":"manual"}` sempre; troca o `token_hash` só se a pessoa ainda aguarda) ou desfazer (e-mail falhou: a contagem volta e o link antigo continua valendo) |
+| `as_fn_copia_link(conta, envelope, signatario, token_hash, ator, ip, user_agent)` | função | `as_signatarios`, `as_eventos` | "Copiar link de assinatura": link novo e `convite_enviado` com `{"canal":"link_copiado"}` |
+| `as_fn_cancela_envelope(conta, envelope, motivo, ator, ip, user_agent)` | função | `as_envelopes`, `as_eventos`, `as_notificacoes`, `as_entregas_webhook` | `enviado → cancelado` (seção 12), motivo e `encerrado_em`, evento `cancelado`, `cancelado_destinatario` para quem já foi convidado (aguardando ou assinou), webhook `envelope.cancelado` |
+| `as_fn_exclui_envelope(conta, envelope, titulo)` | função | `as_envelopes` (cascata) | seção 7.4: só rascunho ou status final; o título digitado tem de ser exato (`titulo_nao_confere`); o servidor apaga a pasta `{conta}/{envelope}/` do armazenamento depois |
 | `as_fn_recusa(signatario_id, token_hash, motivo, ip, user_agent)` | função | `as_envelopes`, `as_signatarios`, `as_eventos`, `as_notificacoes`, `as_entregas_webhook` | recusa (épico 8.5): `enviado → recusado`, encerrado, signatário em `recusou` com o motivo, evento `recusou`, avisos ao remetente e a quem já foi convidado, webhook `envelope.recusado` na fila |
 
 Os erros de negócio sobem com `MESSAGE` igual ao código, e o servidor traduz para a copy da seção 15.
@@ -1019,6 +1025,7 @@ O tom é direto, cordial, sem exclamação e sem jargão jurídico além do nece
 | Enviado | "Enviado." |
 | Faixa de e-mail que falhou | "Não consegui enviar o convite para {email}." / "Tentar de novo" |
 | Detalhe, ações | "Lembrar" · "Copiar link de assinatura" → "Link copiado. O link anterior deixa de funcionar." · "Baixar original" · "Baixar assinado" · "Exportar trilha" · "Cancelar envelope" · "Excluir" |
+| Lista e detalhe, extras (v0.10, épico 8.7) | "Buscar por título ou e-mail" · "Buscar" · "Abrir" · "criado em {data}" / "enviado em {data}" · "Anterior" · "Próxima" · "Página {n} de {total}" · "Envelope excluído." · "Lembrete enviado." · "Este destinatário já recebeu 10 lembretes." · "Copie o link abaixo. O link anterior deixa de funcionar." (sem permissão de área de transferência) · "Trilha de auditoria" · "Voltar" · "O título não confere." · "Motivo: {motivo}" · atores da trilha "Remetente", "Signatário", "Sistema", "API", "MCP" |
 | Lembrete limitado | "Lembrete enviado há menos de 24 horas." |
 | Integridade da trilha | "Trilha íntegra" / "Trilha com divergência no evento {n}" |
 | Cancelar | "Cancelar este envelope?" / "Quem ainda não assinou não vai mais conseguir. Motivo (opcional)" / "Cancelar envelope" |
@@ -1051,13 +1058,13 @@ O remetente técnico é `naoresponda@assina.app.br`, com nome de exibição "{re
 |---|---|---|
 | `convite` | "{remetente} enviou um documento para você assinar: {título}" | mensagem do remetente (se houver), botão "Revisar e assinar", prazo "Assine até {data}." |
 | `codigo` | "Seu código: {código}" | "Use o código {código} para abrir o documento de {remetente}. Ele vale por 10 minutos. Se não foi você, ignore este e-mail." |
-| `lembrete` | "Lembrete: {título} aguarda sua assinatura" | "Vence em {n} dias." e o botão |
+| `lembrete` | "Lembrete: {título} aguarda sua assinatura" | "Vence em {n} dias." (no singular, "Vence em 1 dia."; no último dia, "Assine até {data}.") e o botão "Revisar e assinar" com um link novo |
 | `assinou_remetente` | "{nome} assinou {título}" | progresso "{n} de {m}" |
 | `concluido_destinatario` | "Concluído: {título}" | PDF anexo (ou botão "Baixar documento assinado"), código de verificação, SHA-256 final |
 | `concluido_remetente` | "Concluído: {título}" | idem, com o link do detalhe |
 | `recusado_remetente` | "{nome} recusou {título}" | motivo |
 | `recusado_destinatario` | "{título} foi recusado" | "Não é mais preciso assinar." |
-| `cancelado_destinatario` | "{título} foi cancelado" | motivo, se houver |
+| `cancelado_destinatario` | "{título} foi cancelado" | motivo, se houver. Texto (v0.10): "Não é mais preciso assinar." e "Motivo: {motivo}" |
 | `expirado_remetente` | "Prazo encerrado: {título}" | quem assinou e quem não assinou |
 | `finalizacao_falhou_admin` | "[Assina] Finalização falhou 3 vezes" | id do envelope e erro técnico, sem dado pessoal |
 
