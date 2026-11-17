@@ -1,0 +1,79 @@
+/* Página do signatário (épico 8.5, seção 16): uma coluna; cartão central de até 440 px; o
+   documento na largura toda sobre fundo cinza; barra inferior fixa com o botão primário. */
+.page { min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; background: var(--surface); }
+.card { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 16px; padding: 32px 24px; border-radius: var(--radius-card); background: var(--bg); }
+.brand { margin: 0; font-size: 14px; font-weight: 600; color: var(--text-secondary); }
+.intro { margin: 0; font-size: 17px; line-height: 1.4; }
+.docTitle { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.stateTitle { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; }
+.muted { margin: 0; font-size: 15px; color: var(--text-secondary); line-height: 1.4; }
+.form { display: flex; flex-direction: column; gap: 12px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.label { font-size: 14px; font-weight: 600; color: var(--text-secondary); }
+.input, .textarea { min-height: var(--tap); padding: 10px 12px; border: 1px solid var(--hairline); border-radius: 12px; background: var(--bg); color: var(--text); font: inherit; font-size: 17px; }
+.textarea { min-height: 110px; resize: vertical; }
+.input[aria-invalid="true"] { border-color: var(--red); }
+.codeInput { font-size: 28px; letter-spacing: 0.4em; text-align: center; font-variant-numeric: tabular-nums; }
+.fieldError { font-size: 13px; color: var(--red); }
+.consent { display: flex; gap: 12px; align-items: flex-start; font-size: 15px; line-height: 1.45; cursor: pointer; }
+.consent input { width: 22px; height: 22px; margin: 2px 0 0; flex-shrink: 0; accent-color: var(--accent); }
+.primary, .secondary, .danger {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: var(--tap); padding: 0 20px; border-radius: 999px;
+  font-size: 16px; font-weight: 600; cursor: pointer; text-align: center;
+}
+.primary { border: 0; background: var(--accent); color: #fff; }
+.secondary { border: 1px solid var(--hairline); background: var(--bg); color: var(--text); }
+.danger { border: 0; background: var(--red); color: #fff; }
+.primary:disabled, .secondary:disabled, .danger:disabled { opacity: 0.4; cursor: default; }
+.linkButton { min-height: var(--tap); padding: 0 8px; border: 0; background: none; color: var(--accent); font-size: 15px; font-weight: 600; cursor: pointer; align-self: center; }
+.linkButton:disabled { color: var(--text-secondary); cursor: default; }
+.error { margin: 0; padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--red); font-size: 15px; }
+.others { list-style: none; margin: 0; padding: 0; }
+.others li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--hairline); font-size: 15px; }
+
+/* Documento */
+.docPage { min-height: 100dvh; background: var(--surface); padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+.docHeader { position: sticky; top: 0; z-index: 4; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--hairline); }
+.docHeader .docTitle { font-size: 18px; }
+.pages { max-width: 880px; margin: 0 auto; padding: 16px 12px; display: flex; flex-direction: column; gap: 12px; }
+.pdfPage { position: relative; width: 100%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.loading { position: absolute; inset: 0; display: grid; place-items: center; color: #6e6e73; font-size: 14px; }
+.docField {
+  position: absolute; display: flex; align-items: center; justify-content: center; overflow: hidden;
+  padding: 0 2px; border: 2px dashed; border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 6%, rgba(255, 255, 255, 0.6));
+  color: #1d1d1f; font-size: 10px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; cursor: pointer;
+}
+.docField:disabled { cursor: default; }
+.fieldDone { border-style: solid; background: color-mix(in srgb, #34c759 16%, rgba(255, 255, 255, 0.7)); }
+.fieldHint { color: #6e6e73; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fieldImage { max-width: 100%; max-height: 100%; object-fit: contain; }
+.cursive, .cursivePreview { font-family: "Dancing Script", cursive; font-weight: 400; }
+.cursive { font-size: 1.6em; line-height: 1; white-space: nowrap; }
+
+.bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px;
+  min-height: 64px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--bg) 94%, transparent); backdrop-filter: blur(16px);
+  border-top: 1px solid var(--hairline);
+}
+.progress { margin-right: auto; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.barError { flex-basis: 100%; margin: 0; font-size: 14px; color: var(--red); }
+
+/* Folha (bottom sheet no celular, modal no desktop) */
+.sheetBackdrop { position: fixed; inset: 0; z-index: 10; display: flex; align-items: flex-end; justify-content: center; background: rgba(0, 0, 0, 0.35); }
+.sheet { width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 14px; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); border-radius: 22px 22px 0 0; background: var(--bg); max-height: 92dvh; overflow-y: auto; }
+.sheetTitle { margin: 0; font-size: 20px; font-weight: 700; }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 3px; border-radius: 12px; background: var(--surface); }
+.tab { min-height: 40px; border: 0; border-radius: 10px; background: none; color: var(--text); font-size: 15px; font-weight: 600; cursor: pointer; }
+.tabActive { background: var(--bg); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
+.cursivePreview { margin: 0; min-height: 64px; padding: 8px 12px; border-bottom: 1px solid var(--hairline); font-size: 40px; line-height: 1.3; color: var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* Critério 8.5: o canvas ocupa a largura toda e a rolagem trava enquanto se desenha. */
+.drawPad { width: 100%; height: 200px; border: 1px dashed var(--hairline); border-radius: 12px; background: #fff; touch-action: none; }
+
+@media (min-width: 768px) {
+  .sheetBackdrop { align-items: center; }
+  .sheet { border-radius: 22px; }
+}

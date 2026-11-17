@@ -4,7 +4,7 @@ Descreve o sistema **como está implementado**, não como foi planejado (spec.md
 
 | | |
 |---|---|
-| Estado | Épicos 8.0 a 8.4 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
+| Estado | Épicos 8.0 a 8.5 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
 | Stack | Next.js 16.4.6 (App Router, Cache Components, `proxy.ts`), React 19.3, TypeScript, Supabase Postgres (projeto compartilhado, prefixo `as_`), Vitest, pgTAP |
 
 ---
@@ -80,11 +80,15 @@ Fonte: `supabase/migrations/20261117130100_as_logica.sql`. Toda função com `se
 | `as_fn_substitui_campos` | função | `as_campos` | salvar o editor de campos | troca todos os campos do rascunho numa transação; até 50 por assinante; assinatura, rubrica, data e nome sempre obrigatórios |
 | `as_fn_envia_envelope` | função | `as_envelopes`, `as_signatarios`, `as_eventos`, `as_notificacoes` | enviar (painel, API, MCP) | numa transação, com a conta e o envelope travados: confere rascunho, arquivo, assinantes e limites (30/24 h, documentos do nível); congela com o hash e o prazo; grava os tokens; põe os da vez em aguardando; registra os eventos; enfileira os convites |
 | `as_fn_reserva_notificacao` | função | `as_notificacoes` | antes de mandar um e-mail | reserva a notificação por 2 min e conta a tentativa; um segundo pedido não passa; reserva vencida (servidor caiu) libera sozinha |
+| `as_fn_novo_codigo` | função | `as_signatarios` | pedir código | guarda o código novo (hash) com validade de 10 min; 60 s entre envios; 5 por hora; invalida o anterior |
+| `as_fn_valida_codigo` | função | `as_signatarios`, `as_eventos` | digitar o código | uso único; 5 erros bloqueiam; registra acerto e erro na trilha |
+| `as_fn_assina` | função | envelope, signatário, campos, trilha, notificações | assinar | tudo numa transação: confere link, status, prazo, assinatura, CPF, campos; grava; registra consentiu e assinou; próximo da ordem ou finalizando |
+| `as_fn_recusa` | função | envelope, signatário, trilha, notificações, webhooks | recusar | envelope recusado e encerrado; avisos; webhook na fila |
 | `as_fn_entra_conta` | função | `as_contas`, `as_credenciais` | login | cria a conta já com a chave de API, na mesma transação; conta existente atualiza só o e-mail; suspensa não é tocada |
 
 Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `envelope_congelado`, `envelope_em_andamento`, `status_mudou`, `campo_invalido`, `campos_demais`, `status_mudou`, `envelope_mudou`, `sem_assinante`, `limite_diario`, `limite_do_nivel`, `nao_encontrado`, `email_repetido`, `assinantes_demais`, `copias_demais`).
 
-## 4. Mapa tela → tabelas (até o 8.4)
+## 4. Mapa tela → tabelas (até o 8.5)
 
 | Tela / rota | Lê | Escreve | Passa por |
 |---|---|---|---|
@@ -110,6 +114,11 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | `/painel/envelopes/{id}` (detalhe mínimo) | `as_envelopes`, `as_signatarios`, `as_notificacoes` | — | `getCurrentAccount` |
 | `POST /api/painel/envelopes/{id}/signatarios/{sid}/convite` | `as_signatarios`, `as_notificacoes` | `as_signatarios` (token), `as_notificacoes`, `as_eventos` | `requireConta`, `sendInvite` |
 | `/painel` e `/painel/conta` (uso do nível) | `as_envelopes` (contagem) | — | `getUsage` |
+| `/assinar/{token}` (signatário) | `as_signatarios`, `as_envelopes`, `as_contas`, `as_campos` | via as rotas abaixo | `loadSignerByToken`, `signerPageState` |
+| `POST /api/assinar/{token}/codigo` · `/validar` | `as_signatarios` | `as_signatarios`, `as_eventos` (cookie `as_sig_{id}` ao validar) | `requireSignatarioPorToken`, `as_fn_novo_codigo`, `as_fn_valida_codigo` |
+| `POST /api/assinar/{token}/visualizou` | `as_eventos` | `as_eventos` | sessão do signatário |
+| `POST /api/assinar/{token}/assinar` · `/recusar` | — | via `as_fn_assina` / `as_fn_recusa`; imagens no armazenamento | sessão do signatário |
+| `GET /api/assinar/{token}/documento` | `as_envelopes` | `as_eventos` (`baixou_final`) | sessão para o original; só o link para o final (até 30 dias) |
 | `PUT/GET /api/dev/arquivos/{caminho}` (só dev) | arquivo local | arquivo local | HMAC + validade; 404 em produção ou com R2 |
 
 ## 5. Lógica por tela
@@ -122,6 +131,17 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 - **Editar rascunho:** o estado da tela é o que a pessoa digita; cada mudança é gravada com debounce de 800 ms (PATCH das configurações, PUT da lista inteira). A lista só é enviada se estiver válida (nome, e-mail, sem repetido). "Rascunho salvo." só depois da resposta do servidor; falha mostra "Não consegui salvar. Tente de novo." Os botões de avançar só liberam com arquivo, título e ao menos um assinante **salvo**, sem gravação pendente nem erro.
 - **Editor de campos:** o servidor manda as dimensões das páginas, os assinantes, os campos e uma URL assinada de 5 min do original (ver no editor não registra `baixou_original`). O pdf.js (worker em `/pdf.worker.min.mjs`, copiado por `scripts/copy-pdf-worker.mjs` no `predev`/`prebuild`) desenha cada página quando ela chega perto da tela, na largura da coluna. Cada página tem a proporção real (`aspect-ratio`) e os campos ficam por cima em porcentagem, por isso o lugar relativo não muda com a largura. Campo novo: arrastar o tipo para a página (cai onde soltou) ou clicar (cai no centro da página que cruza o meio da tela), com o tamanho padrão da regra 11.3 ajustado à página (`defaultFieldSize`). Mover e redimensionar com o ponteiro, setas (1%), Shift + setas, Delete. Tudo passa por `clampField` (nunca fora da página). Salvamento automático em fila (`use-debounced-save.ts`, o mesmo do rascunho); "Salvar e revisar" grava na hora e só avança se o servidor confirmou. Abaixo de 768 px só aparece o aviso de usar um computador.
 - **Revisar e enviar:** a revisão mostra o resumo e os avisos (assinante sem campo de assinatura num envelope com campos; PDF que já vinha assinado, recalculado lendo o original). "Enviar para assinatura" chama `sendEnvelope`: lê o original, revalida a regra 11.1, calcula o SHA-256, gera um token por assinante e chama `as_fn_envia_envelope`. Depois do commit manda os convites dos da vez (`sendInvite`, com o token que a transação gravou). Cada envio de convite reserva a notificação no banco (`as_fn_reserva_notificacao`): dois pedidos ao mesmo tempo (outra aba, faxina) não mandam dois e-mails nem trocam o link de um convite que pode estar chegando. Conta suspensa não manda convite. Falha de e-mail não desfaz o envio: a notificação fica "falhou", o detalhe mostra a faixa laranja com "Tentar de novo" (link novo) e `retryFailedInvites` (faxina, regra 11.16; rota do cron no 8.13) reenvia até 5 tentativas. Os erros saem com as frases da seção 15 (limites 429, "mudou de situação" 409).
+- **Assinatura (signatário):** `/assinar/{token}` resolve o link pelo hash (`loadSignerByToken`) e o estado no servidor (`signerPageState`: inválido, indisponível, concluído, cancelado, recusado, prazo, já assinou, pendente ou ativo). No ativo, `SignerFlow` (cliente) conduz:
+  - "Enviar código" chama `requestCode`, que usa `as_fn_novo_codigo` e manda o e-mail; o evento `codigo_enviado` só é gravado se o e-mail saiu;
+  - o código chama `validateCode` (`as_fn_valida_codigo`) e abre o cookie `as_sig_{id}` (JWT de 2 h com o `token_hash` atual e um `jti`);
+  - consentimento;
+  - documento pelo pdf.js (`/documento` só com sessão), com os campos do signatário, a barra "Campos: n de m" e "Próximo campo";
+  - folha da assinatura (Digitar em "Dancing Script" ou Desenhar em canvas que trava a rolagem; CPF validado pelos dígitos);
+  - "Assinar" chama `sign`: confere CPF e PNG (até 200 KB), grava as imagens, chama `as_fn_assina` e, depois do commit, manda o convite do próximo e o aviso ao remetente;
+  - "Recusar" chama `decline` (`as_fn_recusa`) e manda os avisos;
+  - "visualizou" sai quando a primeira página aparece, uma vez por sessão (pelo `jti`).
+- **Avisos por e-mail:** `src/server/notifications/notices.ts` manda `assinou_remetente`, `recusado_remetente` e `recusado_destinatario` com a mesma reserva do convite; `retryFailedNotices` é a parte da faxina (rota no 8.13).
+- **Erros em log:** `src/server/error-code.ts` (`errorCode`) dá o código do erro (Postgres, `resend_NNN`) ou o nome da classe; é o que vai para o log e para `as_notificacoes.erro`, nunca a mensagem livre.
 - **E-mail:** `src/server/email/mailer.ts` escolhe o driver: Resend com `RESEND_API_KEY`; caixa local em `.caixa-de-saida-local/` (um `.txt` e um `.html` por e-mail) só fora de produção; em produção sem chave o app falha. O modelo do convite fica em `templates.ts` (seção 15.2, HTML escapado e texto puro), com remetente "{nome} via Assina" e `reply-to` do remetente.
 - **Uso do nível:** "{n} de {limite} documentos · Nível {n}" no topo da lista e na Conta, em laranja a partir de 80% (`getUsage`).
 - **Armazenamento:** `src/server/files/storage.ts` escolhe o driver. `r2` com as variáveis `R2_*`; `local` (disco em `.armazenamento-local/`, URLs com HMAC servidas por `/api/dev/arquivos`) só fora de produção; em produção sem R2 o app falha.
@@ -146,4 +166,9 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | 14 | Reenviar convite gera um link novo, e o anterior deixa de valer | O banco guarda só o hash do token (6.2); o token em claro não existe depois do envio |
 | 15 | Detalhe do envelope em versão mínima (status, destinatários, faixa de convite que falhou) | O 8.4 exige a faixa no detalhe; trilha, ações e downloads são do 8.7 |
 | 16 | E-mail em dev numa caixa local (`.caixa-de-saida-local/`) | Ainda não há chave do Resend (PENDENCIAS P5) |
-| 17 | Migrations ainda não aplicadas no remoto | O hook `guard-production.sh` da sessão em que o épico foi feito (pasta do agenda-psi) bloqueou o `apply_migration`; aguardando o Alexandre |
+| 17 | Cookie do signatário com `Path=/` (spec v0.8) | Com `/assinar`, o cookie não chegaria às rotas `/api/assinar/...` |
+| 18 | Webhook `envelope.recusado` só fica na fila do banco | A entrega HTTP é do épico 8.9 |
+| 19 | Componentes do pdf.js extraídos para `src/features/pdf/pdf-page.tsx` | Usados pelo editor de campos e pela página do signatário |
+| 20 | CSP completa adiada para o 8.13 | Precisa de nonce para os scripts do Next e do worker do pdf.js; os outros cabeçalhos da seção 17 já valem |
+| 21 | Código conferido por `=` entre hashes sha256 (regra 11.4 pede tempo constante) | Comparar hashes não revela o código pelo tempo; o efeito pedido pela regra se mantém |
+| 22 | Migrations ainda não aplicadas no remoto | O hook `guard-production.sh` da sessão em que o épico foi feito (pasta do agenda-psi) bloqueou o `apply_migration`; aguardando o Alexandre |

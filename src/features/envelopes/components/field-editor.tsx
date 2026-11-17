@@ -15,6 +15,7 @@ import { Trash2 } from "lucide-react";
 import { copy } from "@/lib/copy";
 import { FIELD_TYPES, canBeOptional, clampField, defaultFieldSize, signerColor, type Box, type FieldType } from "@/lib/fields";
 import { MAX_CAMPOS_POR_ASSINANTE, PASSO_TECLADO } from "@/lib/limits";
+import { PdfPageCanvas, usePdfDocument } from "@/features/pdf/pdf-page";
 import { useDebouncedSave } from "../use-debounced-save";
 import styles from "./fields.module.css";
 
@@ -68,8 +69,6 @@ export function FieldEditor({ envelopeId, title, pdfUrl, pages, signers, initial
   const [selectedSigner, setSelectedSigner] = useState(signers[0].id);
   const [selectedField, setSelectedField] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pdf, setPdf] = useState<PdfDoc | null>(null);
-  const [pdfFailed, setPdfFailed] = useState(false);
   const [leaving, setLeaving] = useState(false);
 
   const signerIndex = new Map(signers.map((s, i) => [s.id, i]));
@@ -98,30 +97,8 @@ export function FieldEditor({ envelopeId, title, pdfUrl, pages, signers, initial
     [autosave],
   );
 
-  // Abre o PDF com o pdf.js (só no navegador; o worker vem de /pdf.worker.min.mjs). No celular o
-  // editor não aparece (critério 8.3), então nem baixa o documento. Ao sair da tela, destrói a
-  // tarefa de carregamento (que libera o documento e o worker mesmo se ainda não terminou).
-  useEffect(() => {
-    if (window.matchMedia("(max-width: 767px)").matches) return;
-    let cancelled = false;
-    let task: { promise: Promise<unknown>; destroy(): Promise<void> } | null = null;
-    (async () => {
-      try {
-        const pdfjs = await import("pdfjs-dist");
-        pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
-        if (cancelled) return;
-        task = pdfjs.getDocument({ url: pdfUrl });
-        const loaded = (await task.promise) as PdfDoc;
-        if (!cancelled) setPdf(loaded);
-      } catch {
-        if (!cancelled) setPdfFailed(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-      void task?.destroy();
-    };
-  }, [pdfUrl]);
+  // Abre o PDF (no celular o editor não aparece, critério 8.3, então nem baixa o documento).
+  const { pdf, failed: pdfFailed, retry: retryPdf } = usePdfDocument(pdfUrl, { skipOnMobile: true });
 
   // Limpa um arrasto em andamento se a tela sair no meio dele.
   const dragCleanup = useRef<(() => void) | null>(null);
@@ -336,7 +313,7 @@ export function FieldEditor({ envelopeId, title, pdfUrl, pages, signers, initial
               <span>{copy.fields.loadFailed}</span>
               {/* Recarrega a página do servidor: vem uma URL assinada nova (a anterior vale 5 min). */}
               <button type="button" className={styles.retryButton} onClick={() => {
-                  setPdfFailed(false);
+                  retryPdf();
                   router.refresh();
                 }}>
                 {copy.fields.retry}
@@ -450,64 +427,4 @@ export function FieldEditor({ envelopeId, title, pdfUrl, pages, signers, initial
       </div>
     </>
   );
-}
-
-// Tipos mínimos do pdf.js usados aqui (o módulo só é carregado no navegador).
-type PdfDoc = {
-  numPages: number;
-  getPage(n: number): Promise<PdfPage>;
-  destroy(): Promise<void>;
-};
-type PdfPage = {
-  getViewport(o: { scale: number }): { width: number; height: number };
-  render(o: { canvas: HTMLCanvasElement; viewport: { width: number; height: number } }): { promise: Promise<void>; cancel(): void };
-};
-
-// Desenha uma página quando ela chega perto da tela, na largura atual da coluna (e de novo se a
-// largura mudar).
-function PdfPageCanvas({ pdf, pageNumber }: { pdf: PdfDoc | null; pageNumber: number }) {
-  const canvas = useRef<HTMLCanvasElement>(null);
-  const [near, setNear] = useState(false);
-  const [width, setWidth] = useState(0);
-
-  useEffect(() => {
-    const el = canvas.current?.parentElement;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) setNear(true);
-      },
-      { rootMargin: "600px 0px" },
-    );
-    io.observe(el);
-    // Largura arredondada de 40 em 40 px: não redesenha a cada pixel de redimensionamento.
-    const ro = new ResizeObserver(([entry]) => setWidth(Math.round(entry.contentRect.width / 40) * 40));
-    ro.observe(el);
-    return () => {
-      io.disconnect();
-      ro.disconnect();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!pdf || !near || !width || !canvas.current) return;
-    let task: { promise: Promise<void>; cancel(): void } | null = null;
-    let cancelled = false;
-    (async () => {
-      const page = await pdf.getPage(pageNumber);
-      if (cancelled || !canvas.current) return;
-      const base = page.getViewport({ scale: 1 });
-      const viewport = page.getViewport({ scale: (width * (window.devicePixelRatio || 1)) / base.width });
-      canvas.current.width = Math.floor(viewport.width);
-      canvas.current.height = Math.floor(viewport.height);
-      task = page.render({ canvas: canvas.current, viewport });
-      await task.promise.catch(() => undefined);
-    })();
-    return () => {
-      cancelled = true;
-      task?.cancel();
-    };
-  }, [pdf, near, width, pageNumber]);
-
-  return <canvas ref={canvas} className={styles.canvas} aria-hidden="true" />;
 }

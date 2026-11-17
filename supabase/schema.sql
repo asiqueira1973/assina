@@ -209,6 +209,128 @@ $$;
 ALTER FUNCTION "public"."as_fn_anexa_arquivo"("p_envelope_id" "uuid", "p_conta_id" "uuid", "p_caminho" "text", "p_nome" "text", "p_tamanho" integer, "p_paginas" smallint, "p_dimensoes" "jsonb") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."as_fn_assina"("p_signatario_id" "uuid", "p_token_hash" "text", "p_metodo" "public"."as_metodo_assinatura", "p_assinatura_texto" "text", "p_assinatura_path" "text", "p_rubrica_texto" "text", "p_rubrica_path" "text", "p_cpf" "text", "p_campos" "jsonb", "p_consentimento" "text", "p_ip" "inet" DEFAULT NULL::"inet", "p_user_agent" "text" DEFAULT NULL::"text") RETURNS TABLE("envelope_status" "public"."as_status_envelope", "proximo_id" "uuid")
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $_$
+declare
+  v_s public.as_signatarios;
+  v_e public.as_envelopes;
+  v_campo public.as_campos;
+  v_valor text;
+  v_n_campos integer;
+  v_proximo uuid;
+begin
+  select * into v_s from public.as_signatarios where id = p_signatario_id;
+  if v_s.id is null then
+    raise exception 'link_invalido';
+  end if;
+  -- Trava o envelope antes do signatário: dois últimos assinantes ao mesmo tempo ficam em fila.
+  select * into v_e from public.as_envelopes where id = v_s.envelope_id for update;
+  select * into v_s from public.as_signatarios where id = p_signatario_id for update;
+  if v_s.token_hash <> p_token_hash then
+    raise exception 'link_invalido';
+  end if;
+  if v_s.status <> 'aguardando' or v_e.status <> 'enviado' then
+    raise exception 'status_mudou';
+  end if;
+  if v_e.prazo_em <= now() then
+    raise exception 'prazo_encerrado';
+  end if;
+  if p_consentimento is null or p_consentimento = '' then
+    raise exception 'sem_consentimento';
+  end if;
+  if (p_metodo = 'digitada' and coalesce(trim(p_assinatura_texto), '') = '')
+     or (p_metodo = 'desenhada' and p_assinatura_path is null) then
+    raise exception 'assinatura_ausente';
+  end if;
+  if exists (select 1 from public.as_campos where signatario_id = p_signatario_id and tipo = 'rubrica')
+     and coalesce(trim(p_rubrica_texto), '') = '' and p_rubrica_path is null then
+    raise exception 'assinatura_ausente';
+  end if;
+  if v_s.exigir_cpf and (p_cpf is null or p_cpf !~ '^[0-9]{11}$') then
+    raise exception 'cpf_invalido';
+  end if;
+
+  -- Só campos do próprio signatário podem vir na lista.
+  if exists (
+    select 1 from jsonb_array_elements(coalesce(p_campos, '[]'::jsonb)) c
+     where not exists (select 1 from public.as_campos f where f.id = (c ->> 'id')::uuid and f.signatario_id = p_signatario_id)
+  ) then
+    raise exception 'campo_invalido';
+  end if;
+
+  v_n_campos := 0;
+  for v_campo in select * from public.as_campos where signatario_id = p_signatario_id loop
+    v_n_campos := v_n_campos + 1;
+    select c ->> 'valor' into v_valor from jsonb_array_elements(coalesce(p_campos, '[]'::jsonb)) c where (c ->> 'id')::uuid = v_campo.id;
+    if v_campo.tipo = 'texto' then
+      v_valor := nullif(left(trim(coalesce(v_valor, '')), 200), '');
+      if v_campo.obrigatorio and v_valor is null then raise exception 'campo_obrigatorio'; end if;
+    elsif v_campo.tipo = 'caixa' then
+      v_valor := case when v_valor = 'sim' then 'sim' else 'nao' end;
+      if v_campo.obrigatorio and v_valor <> 'sim' then raise exception 'campo_obrigatorio'; end if;
+    elsif v_campo.tipo = 'data' then
+      v_valor := to_char(now() at time zone 'America/Sao_Paulo', 'DD/MM/YYYY');
+    elsif v_campo.tipo = 'nome' then
+      v_valor := v_s.nome;
+    else
+      v_valor := null; -- assinatura e rubrica usam as colunas do signatário
+    end if;
+    update public.as_campos set valor = v_valor where id = v_campo.id;
+  end loop;
+
+  update public.as_signatarios
+     set status = 'assinou',
+         assinado_em = now(),
+         metodo_assinatura = p_metodo,
+         assinatura_texto = case when p_metodo = 'digitada' then left(trim(p_assinatura_texto), 100) end,
+         assinatura_imagem_path = case when p_metodo = 'desenhada' then p_assinatura_path end,
+         rubrica_texto = nullif(left(trim(coalesce(p_rubrica_texto, '')), 100), ''),
+         rubrica_imagem_path = p_rubrica_path,
+         cpf = case when v_s.exigir_cpf then p_cpf end,
+         consentimento_versao = p_consentimento,
+         ip_assinatura = p_ip,
+         user_agent_assinatura = left(p_user_agent, 500),
+         codigo_hash = null
+   where id = p_signatario_id;
+
+  perform public.as_fn_registra_evento(v_e.id, 'consentiu', 'signatario', p_signatario_id, p_ip, p_user_agent,
+    jsonb_build_object('versao', p_consentimento));
+  perform public.as_fn_registra_evento(v_e.id, 'assinou', 'signatario', p_signatario_id, p_ip, p_user_agent,
+    jsonb_build_object('campos', v_n_campos, 'metodo', p_metodo));
+
+  insert into public.as_notificacoes (conta_id, envelope_id, signatario_id, tipo, chave)
+  values (v_e.conta_id, v_e.id, p_signatario_id, 'assinou_remetente', 'assinou_remetente:' || p_signatario_id)
+  on conflict (chave) do nothing;
+
+  if not exists (select 1 from public.as_signatarios where envelope_id = v_e.id and papel = 'assinar' and status <> 'assinou') then
+    if not public.as_fn_transicao_envelope(v_e.id, 'enviado', 'finalizando') then
+      raise exception 'status_mudou';
+    end if;
+    return query select 'finalizando'::public.as_status_envelope, null::uuid;
+    return;
+  end if;
+
+  if v_e.em_ordem and not exists (select 1 from public.as_signatarios where envelope_id = v_e.id and papel = 'assinar' and status = 'aguardando') then
+    select id into v_proximo from public.as_signatarios
+     where envelope_id = v_e.id and papel = 'assinar' and status = 'pendente'
+     order by ordem limit 1;
+    if v_proximo is not null then
+      update public.as_signatarios set status = 'aguardando' where id = v_proximo;
+      insert into public.as_notificacoes (conta_id, envelope_id, signatario_id, tipo, chave)
+      values (v_e.conta_id, v_e.id, v_proximo, 'convite', 'convite:' || v_proximo)
+      on conflict (chave) do nothing;
+    end if;
+  end if;
+  return query select 'enviado'::public.as_status_envelope, v_proximo;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."as_fn_assina"("p_signatario_id" "uuid", "p_token_hash" "text", "p_metodo" "public"."as_metodo_assinatura", "p_assinatura_texto" "text", "p_assinatura_path" "text", "p_rubrica_texto" "text", "p_rubrica_path" "text", "p_cpf" "text", "p_campos" "jsonb", "p_consentimento" "text", "p_ip" "inet", "p_user_agent" "text") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."as_fn_atualizado_em"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     SET "search_path" TO ''
@@ -650,6 +772,120 @@ $$;
 ALTER FUNCTION "public"."as_fn_filhos_congelados"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."as_fn_novo_codigo"("p_signatario_id" "uuid", "p_codigo_hash" "text", "p_validade_s" integer, "p_intervalo_s" integer, "p_max_hora" integer) RETURNS "text"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  v_s public.as_signatarios;
+  v_status public.as_status_envelope;
+  v_enviados smallint;
+  v_desde timestamptz;
+begin
+  select * into v_s from public.as_signatarios where id = p_signatario_id for update;
+  select status into v_status from public.as_envelopes where id = v_s.envelope_id;
+  if v_s.id is null or v_s.status <> 'aguardando' or v_status <> 'enviado' then
+    return 'indisponivel';
+  end if;
+
+  -- O último código saiu em (expira_em − validade).
+  if v_s.codigo_expira_em is not null
+     and v_s.codigo_expira_em - make_interval(secs => p_validade_s) > now() - make_interval(secs => p_intervalo_s) then
+    return 'aguarde';
+  end if;
+
+  v_enviados := v_s.codigos_enviados_hora;
+  v_desde := v_s.janela_codigos_desde;
+  if v_desde is null or v_desde < now() - interval '1 hour' then
+    v_enviados := 0;
+    v_desde := now();
+  end if;
+  if v_enviados >= p_max_hora then
+    return 'limite_hora';
+  end if;
+
+  update public.as_signatarios
+     set codigo_hash = p_codigo_hash,
+         codigo_expira_em = now() + make_interval(secs => p_validade_s),
+         codigo_tentativas = 0,
+         codigos_enviados_hora = v_enviados + 1,
+         janela_codigos_desde = v_desde
+   where id = p_signatario_id;
+  return 'ok';
+end;
+$$;
+
+
+ALTER FUNCTION "public"."as_fn_novo_codigo"("p_signatario_id" "uuid", "p_codigo_hash" "text", "p_validade_s" integer, "p_intervalo_s" integer, "p_max_hora" integer) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."as_fn_recusa"("p_signatario_id" "uuid", "p_token_hash" "text", "p_motivo" "text", "p_ip" "inet" DEFAULT NULL::"inet", "p_user_agent" "text" DEFAULT NULL::"text") RETURNS "text"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  v_s public.as_signatarios;
+  v_e public.as_envelopes;
+  v_motivo text := trim(coalesce(p_motivo, ''));
+  v_webhook text;
+begin
+  select * into v_s from public.as_signatarios where id = p_signatario_id;
+  if v_s.id is null then
+    raise exception 'link_invalido';
+  end if;
+  select * into v_e from public.as_envelopes where id = v_s.envelope_id for update;
+  select * into v_s from public.as_signatarios where id = p_signatario_id for update;
+  if v_s.token_hash <> p_token_hash then
+    raise exception 'link_invalido';
+  end if;
+  if v_s.status <> 'aguardando' or v_e.status <> 'enviado' then
+    raise exception 'status_mudou';
+  end if;
+  if v_e.prazo_em <= now() then
+    raise exception 'prazo_encerrado';
+  end if;
+  if char_length(v_motivo) not between 1 and 500 then
+    raise exception 'motivo_invalido';
+  end if;
+
+  if not public.as_fn_transicao_envelope(v_e.id, 'enviado', 'recusado') then
+    raise exception 'status_mudou';
+  end if;
+  update public.as_envelopes set encerrado_em = now() where id = v_e.id;
+  update public.as_signatarios
+     set status = 'recusou', recusado_em = now(), motivo_recusa = v_motivo,
+         ip_assinatura = p_ip, user_agent_assinatura = left(p_user_agent, 500), codigo_hash = null
+   where id = p_signatario_id;
+
+  perform public.as_fn_registra_evento(v_e.id, 'recusou', 'signatario', p_signatario_id, p_ip, p_user_agent,
+    jsonb_build_object('motivo', v_motivo));
+
+  insert into public.as_notificacoes (conta_id, envelope_id, signatario_id, tipo, chave)
+  values (v_e.conta_id, v_e.id, p_signatario_id, 'recusado_remetente', 'recusado_remetente:' || v_e.id)
+  on conflict (chave) do nothing;
+  insert into public.as_notificacoes (conta_id, envelope_id, signatario_id, tipo, chave)
+  select v_e.conta_id, v_e.id, s.id, 'recusado_destinatario', 'recusado_destinatario:' || s.id
+    from public.as_signatarios s
+   where s.envelope_id = v_e.id and s.id <> p_signatario_id and s.papel = 'assinar' and s.status in ('aguardando', 'assinou')
+  on conflict (chave) do nothing;
+
+  select webhook_url into v_webhook from public.as_contas where id = v_e.conta_id;
+  if v_webhook is not null then
+    insert into public.as_entregas_webhook (conta_id, envelope_id, evento, corpo)
+    values (v_e.conta_id, v_e.id, 'envelope.recusado', jsonb_build_object(
+      'evento', 'envelope.recusado',
+      'envelope', jsonb_build_object('id', v_e.id, 'status', 'recusado', 'titulo', v_e.titulo, 'codigo_verificacao', v_e.codigo_verificacao),
+      'ocorrido_em', now()
+    ));
+  end if;
+  return 'recusado';
+end;
+$$;
+
+
+ALTER FUNCTION "public"."as_fn_recusa"("p_signatario_id" "uuid", "p_token_hash" "text", "p_motivo" "text", "p_ip" "inet", "p_user_agent" "text") OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."as_eventos" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "envelope_id" "uuid" NOT NULL,
@@ -929,6 +1165,56 @@ $$;
 
 
 ALTER FUNCTION "public"."as_fn_valida_campo"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."as_fn_valida_codigo"("p_signatario_id" "uuid", "p_codigo_hash" "text", "p_max_tentativas" integer, "p_ip" "inet" DEFAULT NULL::"inet", "p_user_agent" "text" DEFAULT NULL::"text") RETURNS TABLE("resultado" "text", "restantes" integer)
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  v_s public.as_signatarios;
+  v_status public.as_status_envelope;
+  v_tentativas integer;
+begin
+  select * into v_s from public.as_signatarios where id = p_signatario_id for update;
+  select status into v_status from public.as_envelopes where id = v_s.envelope_id;
+  if v_s.id is null or v_s.status <> 'aguardando' or v_status <> 'enviado' then
+    return query select 'indisponivel'::text, 0;
+    return;
+  end if;
+  if v_s.codigo_hash is null then
+    return query select case when v_s.codigo_tentativas >= p_max_tentativas then 'bloqueado' else 'sem_codigo' end::text, 0;
+    return;
+  end if;
+  if v_s.codigo_expira_em < now() then
+    return query select 'expirado'::text, 0;
+    return;
+  end if;
+
+  if v_s.codigo_hash = p_codigo_hash then
+    update public.as_signatarios set codigo_hash = null, codigo_tentativas = 0 where id = p_signatario_id;
+    perform public.as_fn_registra_evento(v_s.envelope_id, 'codigo_validado', 'signatario', p_signatario_id, p_ip, p_user_agent, '{}');
+    return query select 'ok'::text, 0;
+    return;
+  end if;
+
+  v_tentativas := v_s.codigo_tentativas + 1;
+  update public.as_signatarios
+     set codigo_tentativas = v_tentativas,
+         codigo_hash = case when v_tentativas >= p_max_tentativas then null else codigo_hash end
+   where id = p_signatario_id;
+  perform public.as_fn_registra_evento(v_s.envelope_id, 'codigo_recusado', 'signatario', p_signatario_id, p_ip, p_user_agent,
+    jsonb_build_object('tentativa', v_tentativas));
+  if v_tentativas >= p_max_tentativas then
+    return query select 'bloqueado'::text, 0;
+  else
+    return query select 'errado'::text, p_max_tentativas - v_tentativas;
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."as_fn_valida_codigo"("p_signatario_id" "uuid", "p_codigo_hash" "text", "p_max_tentativas" integer, "p_ip" "inet", "p_user_agent" "text") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."as_fn_verifica_trilha"("p_envelope_id" "uuid") RETURNS integer
@@ -1431,6 +1717,11 @@ GRANT ALL ON FUNCTION "public"."as_fn_anexa_arquivo"("p_envelope_id" "uuid", "p_
 
 
 
+REVOKE ALL ON FUNCTION "public"."as_fn_assina"("p_signatario_id" "uuid", "p_token_hash" "text", "p_metodo" "public"."as_metodo_assinatura", "p_assinatura_texto" "text", "p_assinatura_path" "text", "p_rubrica_texto" "text", "p_rubrica_path" "text", "p_cpf" "text", "p_campos" "jsonb", "p_consentimento" "text", "p_ip" "inet", "p_user_agent" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_assina"("p_signatario_id" "uuid", "p_token_hash" "text", "p_metodo" "public"."as_metodo_assinatura", "p_assinatura_texto" "text", "p_assinatura_path" "text", "p_rubrica_texto" "text", "p_rubrica_path" "text", "p_cpf" "text", "p_campos" "jsonb", "p_consentimento" "text", "p_ip" "inet", "p_user_agent" "text") TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."as_fn_atualizado_em"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."as_fn_atualizado_em"() TO "service_role";
 
@@ -1489,6 +1780,16 @@ GRANT ALL ON FUNCTION "public"."as_fn_filhos_congelados"() TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."as_fn_novo_codigo"("p_signatario_id" "uuid", "p_codigo_hash" "text", "p_validade_s" integer, "p_intervalo_s" integer, "p_max_hora" integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_novo_codigo"("p_signatario_id" "uuid", "p_codigo_hash" "text", "p_validade_s" integer, "p_intervalo_s" integer, "p_max_hora" integer) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."as_fn_recusa"("p_signatario_id" "uuid", "p_token_hash" "text", "p_motivo" "text", "p_ip" "inet", "p_user_agent" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_recusa"("p_signatario_id" "uuid", "p_token_hash" "text", "p_motivo" "text", "p_ip" "inet", "p_user_agent" "text") TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."as_eventos" TO "service_role";
 
 
@@ -1524,6 +1825,11 @@ GRANT ALL ON FUNCTION "public"."as_fn_transicao_envelope"("p_envelope_id" "uuid"
 
 REVOKE ALL ON FUNCTION "public"."as_fn_valida_campo"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."as_fn_valida_campo"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."as_fn_valida_codigo"("p_signatario_id" "uuid", "p_codigo_hash" "text", "p_max_tentativas" integer, "p_ip" "inet", "p_user_agent" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_valida_codigo"("p_signatario_id" "uuid", "p_codigo_hash" "text", "p_max_tentativas" integer, "p_ip" "inet", "p_user_agent" "text") TO "service_role";
 
 
 

@@ -66,3 +66,25 @@ export const TOKEN_SIGNATARIO_BYTES = 32;
 export const CONVITE_PARADO_MS = 5 * 60 * 1000;
 // Timeout de uma chamada ao Resend.
 export const EMAIL_TIMEOUT_MS = 10_000;
+
+// Regra 11.4: código de acesso do signatário.
+export const CODIGO_VALIDADE_S = 10 * 60;
+export const CODIGO_INTERVALO_S = 60;
+export const CODIGOS_POR_HORA = 5;
+export const CODIGO_TENTATIVAS = 5;
+// Seção 6.2: sessão do signatário depois do código.
+export const SESSAO_SIGNATARIO_S = 2 * 60 * 60;
+// Critério 8.5: assinatura desenhada, só PNG, até 200 KB.
+export const ASSINATURA_PNG_MAX_BYTES = 200 * 1024;
+// Seção 7.3 (as_signatarios.motivo_recusa) e texto de campo (regra 11.3).
+export const MOTIVO_MAX = 500;
+export const TEXTO_CAMPO_MAX = 200;
+// Entrada crua do formulário do signatário, antes de limpar (seção 8.5): PNG em base64 cresce 4/3
+// e leva o prefixo da data URL; CPF com pontuação; motivo com espaços sobrando.
+export const ASSINATURA_DATAURL_MAX = Math.ceil((ASSINATURA_PNG_MAX_BYTES * 4) / 3) + 64;
+export const CPF_ENTRADA_MAX = 20;
+export const MOTIVO_ENTRADA_MAX = MOTIVO_MAX * 2;
+// Regra 11.14: o signatário baixa o final pelo link até 30 dias depois da conclusão.
+export const DOWNLOAD_FINAL_DIAS = 30;
+// Seção 15: versão do texto de consentimento em vigor.
+export const CONSENTIMENTO_VERSAO = "2026-11-17";

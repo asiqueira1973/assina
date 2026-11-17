@@ -9,7 +9,7 @@ Se um teste falhar, corrija o código, não o teste; nunca pule nem apague teste
 Bug: teste que reproduz → ver falhar → commit → `touch .claude/fix-mode` → corrigir → `rm .claude/fix-mode`.
 
 ## Estado
-Épicos 8.0 a 8.4 (rascunho, upload, editor de campos, revisar e enviar) concluídos. Migrations aplicadas só no **local**; pendências do Alexandre em `PENDENCIAS.md`. Próximo: 8.5 (assinatura pelo signatário). E-mail em dev vai para `.caixa-de-saida-local/`.
+Épicos 8.0 a 8.5 (rascunho, upload, editor de campos, envio e assinatura pelo signatário) concluídos. Migrations aplicadas só no **local**; pendências do Alexandre em `PENDENCIAS.md`. Próximo: 8.6 (finalização, manifesto e selo). E-mail em dev vai para `.caixa-de-saida-local/`.
 
 ## Convenções (seção 18)
 - Banco em português `snake_case`, **sempre com prefixo `as_`** (projeto Supabase compartilhado `jeesdmfcrmhyufwzwzwt`). Código, variáveis e arquivos em inglês; fronteira em `src/server/db/`.
@@ -38,5 +38,7 @@ Bug: teste que reproduz → ver falhar → commit → `touch .claude/fix-mode` �
 - O Next 16 mantém a página anterior escondida no DOM: em teste no navegador, `querySelector` pode achar a cópia invisível (largura 0). Filtre pelo elemento visível.
 - O worker do pdf.js vai para `public/` pelo `predev`/`prebuild` (não versionado, fora do ESLint). Rodar `next dev` direto, sem `npm run`, deixa o editor sem worker.
 - Código de verificação em teste: 12 caracteres de `0-9A-HJKMNP-TV-Z` (base32 Crockford, sem I, L, O, U). Inventar "LIVR…" ou "OUTR…" quebra o check do banco e o teste falha longe do motivo (errado três vezes): no Vitest use `generateVerificationCode()`; no pgTAP confira cada letra.
+- CSS module: o mesmo nome de classe declarado duas vezes no arquivo vale pela última, para todos os elementos que o usam (o campo do formulário virou o campo do PDF). Nome por papel: `.field` (formulário), `.docField` (sobre o PDF).
+- Parâmetro de função SQL sem default vira `string` obrigatória nos tipos gerados; para mandar nulo use o helper `nullable()` (`src/server/signing/actions.ts`) em vez de `undefined`.
 - `next typegen` gera `PageProps`/`LayoutProps`: rode `npm run typecheck`, não `tsc` direto.
 - Quando o agente errar a mesma coisa duas vezes, a correção entra aqui.

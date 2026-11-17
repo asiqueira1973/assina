@@ -35,3 +35,45 @@ export function inviteEmail(p: { remetente: string; titulo: string; mensagem: st
   const text = [title, "", p.titulo, ...(p.mensagem ? ["", p.mensagem] : []), "", copy.email.invite.deadline(p.prazo), "", `${copy.email.invite.button}: ${p.link}`, "", copy.email.footer].join("\n");
   return { subject, html: layout(title, paragraphs, { label: copy.email.invite.button, url: p.link }), text };
 }
+
+// Código de acesso (seção 15.2, tipo codigo). Sem link: o código basta (regra 11.4).
+export function codeEmail(p: { codigo: string; remetente: string }): RenderedEmail {
+  const subject = copy.emailNotices.code.subject(p.codigo);
+  const body = copy.emailNotices.code.body(p.codigo, p.remetente);
+  return {
+    subject,
+    html: layout(subject, [`<span style="font-size:32px;font-weight:700;letter-spacing:0.15em">${esc(p.codigo)}</span>`, esc(body)]),
+    text: [subject, "", body, "", copy.email.footer].join("\n"),
+  };
+}
+
+// Aviso ao remetente: alguém assinou (seção 15.2, tipo assinou_remetente).
+export function signedNoticeEmail(p: { nome: string; titulo: string; assinaram: number; total: number; link: string }): RenderedEmail {
+  const subject = copy.emailNotices.signed.subject(p.nome, p.titulo);
+  const progress = copy.emailNotices.signed.progress(p.assinaram, p.total);
+  return {
+    subject,
+    html: layout(subject, [esc(progress)], { label: copy.detail.open, url: p.link }),
+    text: [subject, "", progress, "", p.link, "", copy.email.footer].join("\n"),
+  };
+}
+
+// Aviso ao remetente: alguém recusou, com o motivo (tipo recusado_remetente).
+export function declinedSenderEmail(p: { nome: string; titulo: string; motivo: string; link: string }): RenderedEmail {
+  const subject = copy.emailNotices.declinedSender.subject(p.nome, p.titulo);
+  return {
+    subject,
+    html: layout(subject, [esc(p.motivo).replace(/\n/g, "<br>")], { label: copy.detail.open, url: p.link }),
+    text: [subject, "", p.motivo, "", p.link, "", copy.email.footer].join("\n"),
+  };
+}
+
+// Aviso aos outros assinantes: o documento foi recusado (tipo recusado_destinatario).
+export function declinedRecipientEmail(p: { titulo: string }): RenderedEmail {
+  const subject = copy.emailNotices.declinedRecipient.subject(p.titulo);
+  return {
+    subject,
+    html: layout(subject, [esc(copy.emailNotices.declinedRecipient.body)]),
+    text: [subject, "", copy.emailNotices.declinedRecipient.body, "", copy.email.footer].join("\n"),
+  };
+}

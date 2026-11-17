@@ -7,6 +7,7 @@ import { formatDateLong } from "@/lib/format";
 import { CONVITE_PARADO_MS, MAX_TENTATIVAS_EMAIL } from "@/lib/limits";
 import { maskEmail } from "@/lib/mask";
 import { db } from "@/server/db/client";
+import { errorCode } from "@/server/error-code";
 import { mailer } from "@/server/email/mailer";
 import { inviteEmail } from "@/server/email/templates";
 import { generateSignerToken, signerLink, type SignerToken } from "@/server/envelopes/signer-token";
@@ -64,8 +65,7 @@ export async function sendInvite(signatarioId: string, presetToken?: SignerToken
     });
     return "sent";
   } catch (e) {
-    // Só o código do erro, sem dado pessoal.
-    const erro = e instanceof Error ? e.message.slice(0, 200) : "erro";
+    const erro = errorCode(e); // só o código do erro, sem dado pessoal
     await db().from("as_notificacoes").update({ status: "falhou", erro, reservada_em: null }).eq("id", note.id);
     return "failed";
   }

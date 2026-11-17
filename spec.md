@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Versão | 0.7 (17/11/2026: épico 8.4 — `as_fn_envia_envelope`, textos do revisar e do uso do nível) · 0.6 (17/11/2026: épico 8.3 — `as_fn_substitui_campos`, textos do editor) · 0.5 (17/11/2026: épico 8.2 — textos do rascunho na seção 15; `as_fn_cria_rascunho`, `as_fn_substitui_signatarios`, ordem diferida e rota `/upload`) · 0.4 (17/11/2026: épico 8.1 — canônico da trilha em linhas (11.6), `as_fn_entra_conta` e congelamento refinado (7.5)) · 0.3 (17/11/2026: arquivos no Cloudflare R2, fora do Supabase; 25.3 respondida) · 0.2 (17/11/2026: níveis 1, 2 e 3 com limite de documentos, regra 11.20; armazenamento atrás de uma interface única, seção 18) · 0.1 (17/11/2026: nome Assina, domínio assina.app.br; nome de trabalho anterior "Firma" descartado porque firma.app.br já tinha dono) |
+| Versão | 0.8 (17/11/2026: épico 8.5 — funções do código, assinar e recusar; textos extras do signatário; cookie do signatário com Path=/) · 0.7 (17/11/2026: épico 8.4 — `as_fn_envia_envelope`, textos do revisar e do uso do nível) · 0.6 (17/11/2026: épico 8.3 — `as_fn_substitui_campos`, textos do editor) · 0.5 (17/11/2026: épico 8.2 — textos do rascunho na seção 15; `as_fn_cria_rascunho`, `as_fn_substitui_signatarios`, ordem diferida e rota `/upload`) · 0.4 (17/11/2026: épico 8.1 — canônico da trilha em linhas (11.6), `as_fn_entra_conta` e congelamento refinado (7.5)) · 0.3 (17/11/2026: arquivos no Cloudflare R2, fora do Supabase; 25.3 respondida) · 0.2 (17/11/2026: níveis 1, 2 e 3 com limite de documentos, regra 11.20; armazenamento atrás de uma interface única, seção 18) · 0.1 (17/11/2026: nome Assina, domínio assina.app.br; nome de trabalho anterior "Firma" descartado porque firma.app.br já tinha dono) |
 | Responsável de produto | Alexandre Siqueira (DabLab) |
 | Status | pronto para revisão |
 | Data | 17/11/2026 |
@@ -206,7 +206,7 @@ Os helpers de `src/server/db/` exigem `contaId` ou `tokenHash` como parâmetro o
 
 - Recebe no convite o link `/assinar/{token}`. O token tem 32 bytes aleatórios em base64url, e o banco guarda **só o SHA-256** (`token_hash`).
 - O link sozinho mostra apenas o título, o nome e o e-mail do remetente e o botão "Enviar código". **O conteúdo do documento só aparece depois do código** (regra 11.4), para que um e-mail encaminhado não exponha o documento.
-- Código validado abre uma sessão de signatário: cookie `as_sig_{signatario_id}`, JWT de 2 h, `HttpOnly`, `SameSite=Lax`, `Path=/assinar`. Fechou a aba e voltou dentro de 2 h, não pede código de novo. Depois disso, pede.
+- Código validado abre uma sessão de signatário: cookie `as_sig_{signatario_id}`, JWT de 2 h, `HttpOnly`, `SameSite=Lax`, `Path=/` (v0.8: com `/assinar` o cookie não chegaria às rotas `/api/assinar/...`). O JWT leva o `token_hash` do link: link trocado derruba a sessão. Fechou a aba e voltou dentro de 2 h, não pede código de novo. Depois disso, pede.
 - `Referrer-Policy: no-referrer` e `noindex` em `/assinar/*`.
 
 ### 6.3 Credenciais de máquina
@@ -513,6 +513,10 @@ as_contas 1 ──── N as_credenciais N ──── 0..1 as_oauth_clientes 
 | `as_fn_substitui_campos(envelope_id, conta_id, lista)` | função | `as_campos` | troca todos os campos do rascunho numa transação (épico 8.3): envelope travado, da conta (`nao_encontrado`) e em rascunho (`envelope_congelado`); até 50 por assinante (`campos_demais`); assinatura, rubrica, data e nome sempre obrigatórios; página e assinante conferidos pelo trigger (`campo_invalido`) |
 | `as_fn_envia_envelope(envelope_id, conta_id, caminho, hash, tokens, limite_diario, limites_nivel, ator, ip, user_agent)` | função | `as_envelopes`, `as_signatarios`, `as_eventos`, `as_notificacoes` | envio numa transação (épico 8.4): trava a conta (advisory lock) e o envelope; confere rascunho (`status_mudou`), arquivo igual ao lido pelo servidor e assinantes iguais aos tokens (`envelope_mudou`), assinante (`sem_assinante`), limites 11.12 (`limite_diario`, contado em `as_envios`) e 11.20 (`limite_do_nivel`, números vindos do servidor); aplica `rascunho → enviado` por `as_fn_transicao_envelope` com hash e prazo, grava os `token_hash`, põe os da vez em `aguardando`, registra `criado` (se faltar) e `enviado`, enfileira os convites; devolve os destinatários da vez |
 | `as_fn_reserva_notificacao(id, max_tentativas)` | função | `as_notificacoes` | reserva um e-mail para envio por 2 minutos, se não foi enviado, há tentativa sobrando e ninguém o reservou; conta a tentativa (regra 11.16). Impede dois envios do mesmo convite ao mesmo tempo; reserva vencida libera sozinha |
+| `as_fn_novo_codigo(signatario_id, codigo_hash, validade_s, intervalo_s, max_hora)` | função | `as_signatarios` | código de acesso novo (regra 11.4, épico 8.5): só para quem está aguardando num envelope enviado (`indisponivel`); recusa antes do intervalo (`aguarde`) e acima do máximo da hora (`limite_hora`); invalida o anterior e zera as tentativas |
+| `as_fn_valida_codigo(signatario_id, codigo_hash, max_tentativas, ip, user_agent)` | função | `as_signatarios`, `as_eventos` | confere o código (uso único); conta os erros e bloqueia no último; registra `codigo_validado` / `codigo_recusado`; devolve `ok`, `errado` (com restantes), `bloqueado`, `expirado`, `sem_codigo` |
+| `as_fn_assina(signatario_id, token_hash, metodo, …, campos, consentimento, ip, user_agent)` | função | `as_envelopes`, `as_signatarios`, `as_campos`, `as_eventos`, `as_notificacoes` | assinatura numa transação (épico 8.5): confere link atual, status, prazo (`prazo_em`), assinatura, rubrica, CPF e campos; grava valores (data de Brasília e nome feitos no banco), colunas e IP; registra `consentiu` e `assinou`; enfileira `assinou_remetente`; leva o envelope a `finalizando` (último) ou passa o próximo da ordem a `aguardando` com o convite |
+| `as_fn_recusa(signatario_id, token_hash, motivo, ip, user_agent)` | função | `as_envelopes`, `as_signatarios`, `as_eventos`, `as_notificacoes`, `as_entregas_webhook` | recusa (épico 8.5): `enviado → recusado`, encerrado, signatário em `recusou` com o motivo, evento `recusou`, avisos ao remetente e a quem já foi convidado, webhook `envelope.recusado` na fila |
 
 Os erros de negócio sobem com `MESSAGE` igual ao código, e o servidor traduz para a copy da seção 15.
 
@@ -1002,7 +1006,7 @@ O tom é direto, cordial, sem exclamação e sem jargão jurídico além do nece
 | Revisar | "Revise antes de enviar" · "{nome} não tem campo de assinatura. Ele vai assinar só no manifesto." · "Depois de enviado, o documento não pode ser alterado." · "Enviar para assinatura" |
 | Revisar, resumo (v0.7) | "Mensagem" · "Sem mensagem" · "1 campo" / "{n} campos" / "Sem campos (assina no manifesto)" · "Editar" |
 | Uso do nível (v0.7, regra 11.20) | "{n} de {limite} documentos · Nível {n}" |
-| Detalhe (v0.7) | "Código de verificação" |
+| Detalhe (v0.7) | "Código de verificação" · "Ver envelope" (botão dos e-mails de aviso ao remetente, v0.8) |
 | Enviado | "Enviado." |
 | Faixa de e-mail que falhou | "Não consegui enviar o convite para {email}." / "Tentar de novo" |
 | Detalhe, ações | "Lembrar" · "Copiar link de assinatura" → "Link copiado. O link anterior deixa de funcionar." · "Baixar original" · "Baixar assinado" · "Exportar trilha" · "Cancelar envelope" · "Excluir" |
@@ -1020,6 +1024,7 @@ O tom é direto, cordial, sem exclamação e sem jargão jurídico além do nece
 | Consentimento (versão `2026-11-17`) | "Concordo em assinar este documento eletronicamente. Entendo que minha assinatura será registrada com meu nome, e-mail, endereço IP, data e hora, e que tem validade jurídica entre as partes que aceitam este meio, nos termos do art. 10, § 2º, da MP 2.200-2/2001." |
 | Leitura | "Campos: {n} de {m}" · "Próximo campo" · "Assinar" · "Recusar" |
 | Folha da assinatura | "Sua assinatura" · "Digitar" · "Desenhar" · "Limpar" · "CPF" · "Usar esta assinatura" |
+| Signatário, extras (v0.8) | "Sua rubrica" (folha da rubrica) · "Continuar" (depois do código e do consentimento) · "Confirmar" (campo de texto) |
 | CPF inválido | "CPF inválido." |
 | Assinado | "Documento assinado." / "Quando todos assinarem, você recebe o documento final por e-mail." |
 | Recusar | "Recusar este documento?" / "Conte o motivo para {remetente}." / "Recusar" |

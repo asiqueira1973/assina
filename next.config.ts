@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 // Configuração do Next 16 (seção 4): Cache Components ligado, como no Reunião.
-// Cabeçalhos de segurança da seção 17. A CSP completa entra no épico 8.5, junto com o pdf.js
-// (worker em blob:); até lá, só os cabeçalhos que não dependem dele.
+// Cabeçalhos de segurança da seção 17. A CSP completa ficou para o épico 8.13 (entrega),
+// com nonce para os scripts do Next e o worker do pdf.js; até lá, só os que não dependem dela.
 const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,

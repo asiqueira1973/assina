@@ -275,6 +275,11 @@ isOneToOne: false
               "caminho_anterior": string,"campos_removidos": boolean
             }[]
                            },
+"as_fn_assina":
+{ Args: { "p_assinatura_path": string,"p_assinatura_texto": string,"p_campos": Json,"p_consentimento": string,"p_cpf": string,"p_ip"?: unknown,"p_metodo": Database["public"]['Enums']["as_metodo_assinatura"],"p_rubrica_path": string,"p_rubrica_texto": string,"p_signatario_id": string,"p_token_hash": string,"p_user_agent"?: string }; Returns: {
+              "envelope_status": Database["public"]['Enums']["as_status_envelope"],"proximo_id": string
+            }[]
+                           },
 "as_fn_cria_rascunho":
 { Args: { "p_ator": Database["public"]['Enums']["as_ator"],"p_codigo_verificacao": string,"p_conta_id": string,"p_ip"?: unknown,"p_origem": Database["public"]['Enums']["as_origem"],"p_titulo": string,"p_user_agent"?: string }; Returns: {
               "arquivo_final_path": string | null,
@@ -360,6 +365,12 @@ isOneToOne: false
       } },
 "as_fn_evento_canonico":
 { Args: { "p_ator": Database["public"]['Enums']["as_ator"],"p_dados": Json,"p_envelope_id": string,"p_ip": unknown,"p_ocorrido_em": string,"p_seq": number,"p_signatario_id": string,"p_tipo": Database["public"]['Enums']["as_tipo_evento"],"p_user_agent": string }; Returns: string
+                           },
+"as_fn_novo_codigo":
+{ Args: { "p_codigo_hash": string,"p_intervalo_s": number,"p_max_hora": number,"p_signatario_id": string,"p_validade_s": number }; Returns: string
+                           },
+"as_fn_recusa":
+{ Args: { "p_ip"?: unknown,"p_motivo": string,"p_signatario_id": string,"p_token_hash": string,"p_user_agent"?: string }; Returns: string
                            },
 "as_fn_registra_evento":
 { Args: { "p_ator": Database["public"]['Enums']["as_ator"],"p_dados"?: Json,"p_envelope_id": string,"p_ip"?: unknown,"p_signatario_id"?: string,"p_tipo": Database["public"]['Enums']["as_tipo_evento"],"p_user_agent"?: string }; Returns: {
@@ -448,6 +459,11 @@ isOneToOne: false
       } },
 "as_fn_transicao_envelope":
 { Args: { "p_de": Database["public"]['Enums']["as_status_envelope"],"p_envelope_id": string,"p_para": Database["public"]['Enums']["as_status_envelope"] }; Returns: boolean
+                           },
+"as_fn_valida_codigo":
+{ Args: { "p_codigo_hash": string,"p_ip"?: unknown,"p_max_tentativas": number,"p_signatario_id": string,"p_user_agent"?: string }; Returns: {
+              "restantes": number,"resultado": string
+            }[]
                            },
 "as_fn_verifica_trilha":
 { Args: { "p_envelope_id": string }; Returns: number
