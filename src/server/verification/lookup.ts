@@ -4,20 +4,8 @@
 import "server-only";
 import { db } from "@/server/db/client";
 
-export type PublicSummary = {
-  status: "enviado" | "finalizando" | "concluido" | "recusado" | "cancelado" | "expirado";
-  titulo: string;
-  enviado_em: string | null;
-  concluido_em: string | null;
-  selo: "B-B" | "B-T" | null;
-  assinantes: { nome: string; assinado_em: string | null }[];
-};
-export type VerificationResult =
-  | { resultado: "final"; envelopes: PublicSummary[] }
-  | { resultado: "original"; envelopes: PublicSummary[] }
-  | { resultado: "codigo"; envelopes: PublicSummary[] }
-  | { resultado: "original_multiplo"; envelopes: PublicSummary[] }
-  | { resultado: "nao_encontrado"; envelopes: PublicSummary[] };
+export type { PublicSummary, VerificationResult } from "@/features/verify/types";
+import type { PublicSummary, VerificationResult } from "@/features/verify/types";
 
 // Consulta por hash (SHA-256 hex) ou por código já normalizado. Devolve: o resultado.
 export async function verifyDocument(q: { hash?: string; codigo?: string }): Promise<VerificationResult> {

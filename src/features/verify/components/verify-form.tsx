@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { FileSearch } from "lucide-react";
 import { copy } from "@/lib/copy";
 import { normalizeVerificationCode } from "@/lib/verification-code";
-import type { VerificationResult } from "@/server/verification/lookup";
+import type { VerificationResult } from "../types";
 import { VerifyResult } from "./verify-result";
 import styles from "./verify.module.css";
 

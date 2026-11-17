@@ -43,4 +43,5 @@ Bug: teste que reproduz → ver falhar → commit → `touch .claude/fix-mode` �
 - Editou uma migration já aplicada no local? O banco não muda sozinho: `supabase db reset --local` e `npm run db:types`. Sem isso, a chamada dá `PGRST202` (função não encontrada) e o teste falha longe do motivo.
 - Texto desenhado no PDF passa por `safeText` (`src/server/pdf/fonts.ts`): a Helvetica padrão só tem WinAnsi, e um "−" ou "Ł" quebraria o `drawText`. Selo e certificado de teste: `tests/fixtures/seal.ts` (o `tests/setup.ts` já põe no ambiente).
 - `next typegen` gera `PageProps`/`LayoutProps`: rode `npm run typecheck`, não `tsc` direto.
+- Enquanto os hooks do Assina não disparam na sessão (PENDENCIAS P4), os guardas rodam à mão, e um bloqueio tem de **impedir o commit** (`[ "$n" -eq 0 ] && git commit …`). No 8.8, um bloqueio do `guard-secrets` (componente de cliente importando tipo de `src/server/`) passou porque o commit vinha encadeado depois da varredura. Tipos usados pelo cliente moram fora de `src/server/` (ex.: `src/features/verify/types.ts`).
 - Quando o agente errar a mesma coisa duas vezes, a correção entra aqui.

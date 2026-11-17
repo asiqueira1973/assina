@@ -5,7 +5,7 @@
 import { StatusPill } from "@/features/envelopes/components/status-pill";
 import { copy } from "@/lib/copy";
 import { formatDateTime } from "@/lib/format";
-import type { PublicSummary, VerificationResult } from "@/server/verification/lookup";
+import type { PublicSummary, VerificationResult } from "../types";
 import styles from "./verify.module.css";
 
 function Summary({ e }: { e: PublicSummary }) {
