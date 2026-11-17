@@ -1,0 +1,315 @@
+// Assina — modelo de dados (spec.md, seção 7). Projeto Supabase compartilhado, prefixo as_.
+// RLS ligado e SEM política em todas as tabelas; REVOKE ALL de anon/authenticated (seção 6.5).
+// Timestamps em UTC. Coordenadas de campo em fração da página (0–1, origem no canto superior esquerdo).
+
+enum as_status_envelope {
+  rascunho
+  enviado
+  finalizando
+  concluido
+  recusado
+  cancelado
+  expirado
+}
+
+enum as_status_signatario {
+  pendente
+  aguardando
+  assinou
+  recusou
+}
+
+enum as_papel {
+  assinar
+  copia
+}
+
+enum as_tipo_campo {
+  assinatura
+  rubrica
+  data
+  nome
+  texto
+  caixa
+}
+
+enum as_metodo_assinatura {
+  digitada
+  desenhada
+}
+
+enum as_origem {
+  painel
+  api
+  mcp
+}
+
+enum as_tipo_credencial {
+  api
+  mcp
+}
+
+enum as_ator {
+  remetente
+  signatario
+  sistema
+  api
+  mcp
+}
+
+enum as_tipo_evento {
+  criado
+  enviado
+  convite_enviado
+  codigo_enviado
+  codigo_validado
+  codigo_recusado
+  visualizou
+  consentiu
+  assinou
+  recusou
+  lembrete_enviado
+  finalizado
+  concluido
+  cancelado
+  expirado
+  baixou_original
+  baixou_final
+}
+
+enum as_tipo_notificacao {
+  convite
+  codigo
+  lembrete
+  concluido_destinatario
+  concluido_remetente
+  assinou_remetente
+  recusado_remetente
+  recusado_destinatario
+  cancelado_destinatario
+  expirado_remetente
+  finalizacao_falhou_admin
+}
+
+enum as_status_notificacao {
+  pendente
+  enviada
+  falhou
+}
+
+enum as_status_entrega {
+  pendente
+  entregue
+  falhou
+}
+
+// Exclusão: hard delete pelo remetente, em cascata em tudo + pasta {conta_id}/ do Storage (7.4).
+// Trigger as_tg_atualizado_em.
+Table as_contas {
+  id uuid [pk, default: `gen_random_uuid()`]
+  google_sub text [not null, unique]
+  email text [not null, note: 'minúsculas']
+  nome text [not null, note: '1–100']
+  termos_aceitos_em timestamptz [note: 'nulo = ainda não passou pelas boas-vindas']
+  suspensa_em timestamptz [note: 'nulo = ativa (11.12)']
+  nivel smallint [not null, default: 1, note: 'check 1–3; limite de documentos guardados 50 / 500 / 5.000 (11.20)']
+  webhook_url text [note: 'nulo = sem webhook; só https, máx. 500']
+  webhook_segredo_cifrado text [note: 'nulo se e só se webhook_url nulo; AES-256-GCM iv.tag.cifra']
+  criado_em timestamptz [not null, default: `now()`]
+  atualizado_em timestamptz [not null, default: `now()`]
+
+  Note: 'Uma por conta Google do remetente.'
+}
+
+// Índice único parcial as_credenciais_api_uk em (conta_id) where tipo = 'api' and revogada_em is null.
+Table as_credenciais {
+  id uuid [pk, default: `gen_random_uuid()`]
+  conta_id uuid [not null]
+  tipo as_tipo_credencial [not null]
+  nome text [not null, note: '"Chave de API" ou client_name do OAuth']
+  prefixo text [not null, note: '12 primeiros caracteres']
+  valor_hash text [not null, unique, note: 'SHA-256 hex']
+  valor_cifrado text [note: 'só em tipo = api (6.3); nulo em mcp']
+  oauth_cliente_id uuid [note: 'nulo em api']
+  ultimo_uso_em timestamptz [note: 'nulo = nunca usada']
+  revogada_em timestamptz [note: 'nulo = válida']
+  criado_em timestamptz [not null, default: `now()`]
+}
+
+Table as_oauth_clientes {
+  id uuid [pk, default: `gen_random_uuid()`, note: 'é o client_id']
+  nome text [not null, note: 'client_name, máx. 100']
+  redirect_uris "text[]" [not null, note: '1–5 URIs']
+  criado_em timestamptz [not null, default: `now()`]
+
+  Note: 'Clientes MCP registrados por DCR (RFC 7591).'
+}
+
+// Apagados pela faxina 24 h após expirar (7.4).
+Table as_oauth_codigos {
+  codigo_hash text [pk, note: 'SHA-256 hex']
+  cliente_id uuid [not null]
+  conta_id uuid [not null]
+  redirect_uri text [not null]
+  code_challenge text [not null, note: 'S256']
+  expira_em timestamptz [not null, note: 'criação + 10 min']
+  usado_em timestamptz [note: 'nulo = ainda não trocado']
+}
+
+// Triggers: as_tg_atualizado_em, as_tg_envelope_congelado (fora de rascunho, arquivo/hash/páginas/em_ordem/título não mudam).
+// Índices: (conta_id, criado_em desc), (status, prazo_em);
+// unique parcial as_envelopes_idem_uk em (conta_id, chave_idempotencia) where chave_idempotencia is not null.
+// Exclusão: rascunho e status finais = hard delete; enviado/finalizando = não pode (cancelar antes) (7.4).
+Table as_envelopes {
+  id uuid [pk, default: `gen_random_uuid()`]
+  conta_id uuid [not null]
+  titulo text [not null, note: '1–120']
+  mensagem text [note: 'nulo = convite sem mensagem; máx. 1.000']
+  status as_status_envelope [not null, default: 'rascunho']
+  origem as_origem [not null]
+  em_ordem boolean [not null, default: false]
+  prazo_dias smallint [not null, default: 30, note: 'check 1–90']
+  prazo_em timestamptz [note: 'enviado_em + prazo_dias; nulo em rascunho']
+  lembrete_cada_dias smallint [default: 3, note: 'nulo = sem lembrete; check em (2, 3, 7)']
+  nome_arquivo text [note: 'nulo até o upload; máx. 200']
+  arquivo_original_path text [note: '{conta_id}/{id}/original.pdf; nulo até upload ou após expurgo (11.14)']
+  tamanho_bytes integer [note: 'nulo até o upload']
+  paginas smallint [note: 'nulo até validar (11.1)']
+  dimensoes_paginas jsonb [note: '[{"l":595.28,"a":841.89}, …] em pontos; nulo até validar']
+  hash_original text [note: 'SHA-256 hex; preenchido no envio e nunca mais alterado']
+  arquivo_final_path text [note: 'nulo até concluido']
+  hash_final text [note: 'nulo até concluido']
+  selo text [note: 'B-B ou B-T (11.10); nulo até concluido']
+  codigo_verificacao text [not null, unique, note: '12 caracteres base32 Crockford (11.11)']
+  chave_idempotencia text [note: 'nulo fora da API']
+  tentativas_finalizacao smallint [not null, default: 0]
+  motivo_cancelamento text [note: 'máx. 500; só em cancelado']
+  enviado_em timestamptz
+  concluido_em timestamptz
+  encerrado_em timestamptz [note: 'quando entrou em recusado, cancelado ou expirado']
+  arquivos_expurgados_em timestamptz [note: 'nulo até a faxina da regra 11.14']
+  criado_em timestamptz [not null, default: `now()`]
+  atualizado_em timestamptz [not null, default: `now()`]
+}
+
+// Índice único as_signatarios_email_uk em (envelope_id, email).
+// Índice único parcial as_signatarios_ordem_uk em (envelope_id, ordem) where papel = 'assinar'.
+// Trigger as_tg_filhos_congelados: fora de rascunho, nome/email/papel/ordem/exigir_cpf não mudam; sem insert/delete.
+Table as_signatarios {
+  id uuid [pk, default: `gen_random_uuid()`]
+  envelope_id uuid [not null]
+  conta_id uuid [not null, note: 'desnormalizado para filtrar sem join']
+  papel as_papel [not null, default: 'assinar']
+  ordem smallint [not null, default: 1, note: '1–10; ignorado em copia']
+  nome text [not null, note: '1–100']
+  email text [not null, note: 'minúsculas']
+  exigir_cpf boolean [not null, default: false]
+  cpf text [note: '11 dígitos; preenchido pelo signatário se exigido']
+  status as_status_signatario [not null, default: 'pendente']
+  token_hash text [not null, unique, note: 'SHA-256 hex do token do link']
+  codigo_hash text [note: 'sha256(id + código); nulo sem código ativo']
+  codigo_expira_em timestamptz
+  codigo_tentativas smallint [not null, default: 0]
+  codigos_enviados_hora smallint [not null, default: 0]
+  janela_codigos_desde timestamptz
+  consentimento_versao text [note: 'nulo até consentir']
+  metodo_assinatura as_metodo_assinatura [note: 'nulo até assinar']
+  assinatura_texto text [note: 'máx. 100']
+  assinatura_imagem_path text
+  rubrica_texto text
+  rubrica_imagem_path text
+  ip_assinatura inet
+  user_agent_assinatura text [note: 'máx. 500']
+  assinado_em timestamptz
+  recusado_em timestamptz
+  motivo_recusa text [note: '1–500, obrigatório ao recusar']
+  notificado_em timestamptz [note: 'nulo enquanto pendente']
+  ultimo_lembrete_em timestamptz
+  lembretes_enviados smallint [not null, default: 0, note: 'máx. 10']
+  criado_em timestamptz [not null, default: `now()`]
+}
+
+// Trigger as_tg_valida_campo: pagina ≤ paginas do envelope; signatário do mesmo envelope com papel assinar.
+// Checks: x + largura ≤ 1; y + altura ≤ 1; assinatura/rubrica/data/nome sempre obrigatórios.
+Table as_campos {
+  id uuid [pk, default: `gen_random_uuid()`]
+  envelope_id uuid [not null]
+  signatario_id uuid [not null]
+  tipo as_tipo_campo [not null]
+  pagina smallint [not null, note: '1-based']
+  x "numeric(6,5)" [not null]
+  y "numeric(6,5)" [not null]
+  largura "numeric(6,5)" [not null]
+  altura "numeric(6,5)" [not null]
+  obrigatorio boolean [not null, default: true]
+  rotulo text [note: 'máx. 60']
+  valor text [note: 'preenchido ao assinar; nulo para assinatura e rubrica']
+}
+
+// SÓ INSERÇÃO, e só pela função as_fn_registra_evento (hash encadeado, 11.6).
+// Trigger as_tg_eventos_imutaveis: UPDATE sempre recusado; DELETE só em cascata.
+// Unique (envelope_id, seq).
+Table as_eventos {
+  id uuid [pk, default: `gen_random_uuid()`]
+  envelope_id uuid [not null]
+  seq integer [not null]
+  tipo as_tipo_evento [not null]
+  ator as_ator [not null]
+  signatario_id uuid [note: 'nulo em eventos do remetente ou do sistema']
+  ip inet [note: 'nulo em eventos do sistema']
+  user_agent text [note: 'máx. 500']
+  dados jsonb [not null, default: '{}']
+  ocorrido_em timestamptz [not null, default: `now()`]
+  hash_anterior text [not null, note: '64 zeros no primeiro']
+  hash text [not null, note: 'SHA-256 hex']
+
+  indexes {
+    (envelope_id, seq) [unique]
+  }
+}
+
+Table as_notificacoes {
+  id uuid [pk, default: `gen_random_uuid()`]
+  conta_id uuid [not null]
+  envelope_id uuid [note: 'nulo só em finalizacao_falhou_admin']
+  signatario_id uuid [note: 'nulo nos avisos ao remetente']
+  tipo as_tipo_notificacao [not null]
+  chave text [not null, unique, note: 'idempotência']
+  status as_status_notificacao [not null, default: 'pendente']
+  tentativas smallint [not null, default: 0, note: 'máx. 5']
+  resend_id text
+  erro text [note: 'sem dado pessoal']
+  criado_em timestamptz [not null, default: `now()`]
+  enviada_em timestamptz
+}
+
+Table as_entregas_webhook {
+  id uuid [pk, default: `gen_random_uuid()`, note: 'vai no cabeçalho Assina-Entrega']
+  conta_id uuid [not null]
+  envelope_id uuid [not null]
+  evento text [not null, note: 'regra 11.17']
+  corpo jsonb [not null]
+  status as_status_entrega [not null, default: 'pendente']
+  tentativas smallint [not null, default: 0, note: 'máx. 6']
+  ultimo_status_http smallint
+  criado_em timestamptz [not null, default: `now()`]
+  entregue_em timestamptz
+}
+
+// Todas as FKs abaixo: on delete cascade, salvo indicação.
+Ref: as_credenciais.conta_id > as_contas.id [delete: cascade]
+Ref: as_credenciais.oauth_cliente_id > as_oauth_clientes.id [delete: set null]
+Ref: as_oauth_codigos.cliente_id > as_oauth_clientes.id [delete: cascade]
+Ref: as_oauth_codigos.conta_id > as_contas.id [delete: cascade]
+Ref: as_envelopes.conta_id > as_contas.id [delete: cascade]
+Ref: as_signatarios.envelope_id > as_envelopes.id [delete: cascade]
+Ref: as_signatarios.conta_id > as_contas.id [delete: cascade]
+Ref: as_campos.envelope_id > as_envelopes.id [delete: cascade]
+Ref: as_campos.signatario_id > as_signatarios.id [delete: cascade]
+Ref: as_eventos.envelope_id > as_envelopes.id [delete: cascade]
+Ref: as_eventos.signatario_id > as_signatarios.id [delete: cascade]
+Ref: as_notificacoes.conta_id > as_contas.id [delete: cascade]
+Ref: as_notificacoes.envelope_id > as_envelopes.id [delete: cascade]
+Ref: as_notificacoes.signatario_id > as_signatarios.id [delete: cascade]
+Ref: as_entregas_webhook.conta_id > as_contas.id [delete: cascade]
+Ref: as_entregas_webhook.envelope_id > as_envelopes.id [delete: cascade]
