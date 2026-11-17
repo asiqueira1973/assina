@@ -4,7 +4,7 @@ Descreve o sistema **como está implementado**, não como foi planejado (spec.md
 
 | | |
 |---|---|
-| Estado | Épicos 8.0 a 8.7 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
+| Estado | Épicos 8.0 a 8.8 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
 | Stack | Next.js 16.4.6 (App Router, Cache Components, `proxy.ts`), React 19.3, TypeScript, Supabase Postgres (projeto compartilhado, prefixo `as_`), Vitest, pgTAP |
 
 ---
@@ -92,6 +92,7 @@ Fonte: `supabase/migrations/20261117130100_as_logica.sql`. Toda função com `se
 | `as_fn_copia_link` | função | signatário, trilha | Copiar link | link novo e `convite_enviado` `{canal: link_copiado}` |
 | `as_fn_cancela_envelope` | função | envelope, trilha, notificações, webhooks | Cancelar | `enviado → cancelado`, avisos e webhook |
 | `as_fn_exclui_envelope` | função | envelope (cascata) | Excluir | 7.4: status e título conferidos |
+| `as_fn_verifica_documento` · `as_fn_resumo_publico` | funções | envelopes, signatários, contas | `/verificar` | consulta pública por hash ou código; só o resumo da regra 11.11 |
 | `as_fn_conclui_envelope` | função | envelope, trilha, notificações, webhooks | finalizar | `finalizando → concluido` com hash, selo e caminho; eventos `finalizado` e `concluido`; e-mails de conclusão e webhook na mesma transação |
 | `as_fn_falha_finalizacao` | função | envelope, notificações | finalizar | registra a falha só da própria reserva; na 3ª tentativa (ou na `integridade_violada`), alerta ao admin |
 | `as_tg_final_imutavel` | trigger | `as_envelopes` | — | o resultado da finalização não se reescreve |
@@ -99,7 +100,7 @@ Fonte: `supabase/migrations/20261117130100_as_logica.sql`. Toda função com `se
 
 Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `envelope_congelado`, `envelope_em_andamento`, `status_mudou`, `campo_invalido`, `campos_demais`, `status_mudou`, `envelope_mudou`, `sem_assinante`, `limite_diario`, `limite_do_nivel`, `nao_encontrado`, `email_repetido`, `assinantes_demais`, `copias_demais`).
 
-## 4. Mapa tela → tabelas (até o 8.7)
+## 4. Mapa tela → tabelas (até o 8.8)
 
 | Tela / rota | Lê | Escreve | Passa por |
 |---|---|---|---|
@@ -126,6 +127,8 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | `POST …/{id}/signatarios/{sid}/lembrar` · `…/link` | — | signatário, notificações, trilha | `remindSigner`, `copySignerLink` |
 | `POST …/{id}/cancelar` · `DELETE /api/painel/envelopes/{id}` | — | via `as_fn_cancela_envelope` / `as_fn_exclui_envelope`; a exclusão apaga a pasta no armazenamento | `cancelEnvelope`, `deleteEnvelope` |
 | `GET …/{id}/arquivo?versao=` · `GET …/{id}/trilha.csv` | envelope, trilha | `as_eventos` (`baixou_*`) | `downloadUrl`, `getTrail`, `trailCsv` |
+| `/verificar` (público) | — (o hash é calculado no navegador) | — | `VerifyForm` → `GET /api/verificar?hash=` |
+| `/verificar/{codigo}` (público, o QR do manifesto) e `GET /api/verificar?codigo=` | envelopes, signatários, contas | — | `verifyDocument` → `as_fn_verifica_documento` |
 | `POST /api/painel/envelopes/{id}/signatarios/{sid}/convite` | `as_signatarios`, `as_notificacoes` | `as_signatarios` (token), `as_notificacoes`, `as_eventos` | `requireConta`, `sendInvite` |
 | `/painel` e `/painel/conta` (uso do nível) | `as_envelopes` (contagem) | — | `getUsage` |
 | `/assinar/{token}` (signatário) | `as_signatarios`, `as_envelopes`, `as_contas`, `as_campos` | via as rotas abaixo | `loadSignerByToken`, `signerPageState` |
@@ -157,6 +160,13 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
   - "Recusar" chama `decline` (`as_fn_recusa`) e manda os avisos;
   - "visualizou" sai quando a primeira página aparece, uma vez por sessão (pelo `jti`).
 - **Avisos por e-mail:** `src/server/notifications/notices.ts` manda `assinou_remetente`, `recusado_remetente` e `recusado_destinatario` com a mesma reserva do convite; `retryFailedNotices` é a parte da faxina (rota no 8.13).
+- **Verificação pública (épico 8.8):**
+  - `/verificar` (`VerifyForm`, cliente) calcula o SHA-256 do PDF com a Web Crypto e manda só o hash para `GET /api/verificar`; o arquivo não sai do computador.
+  - O código passa por `normalizeVerificationCode` (`src/lib/verification-code.ts`: minúsculas, espaços, hífens, O→0, I/L→1) e abre `/verificar/{codigo}`, que é renderizada no servidor.
+  - As duas usam `verifyDocument` (`src/server/verification/lookup.ts`) e o mesmo `VerifyResult`.
+  - A resposta da API é `no-store`.
+  - Só `/verificar` é indexável; `/verificar/{codigo}` fica com o `noindex` do layout.
+  - O limite de 30 por minuto por IP é regra do Vercel Firewall (README; PENDENCIAS P8).
 - **Painel (`src/server/envelopes/manage.ts`, épico 8.7):** a lista é lida no servidor (`?filtro=&q=&pagina=`; filtro desconhecido vira "todos"), com o esqueleto no Suspense e os estados vazios da seção 15. O detalhe mostra ações por destinatário (Lembrar, Copiar link) e do envelope (downloads, Exportar trilha, Cancelar, Excluir) em componentes de cliente que chamam as rotas e releem a página (`router.refresh`).
   - **Lembrete manual:** reserva no banco, e-mail com link novo e confirmação. Se o e-mail falha, desfaz, e o link antigo continua.
   - **Copiar link:** sem permissão de área de transferência, o link aparece selecionado num campo, com o aviso.
@@ -207,4 +217,8 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | 29 | Lembrete manual e "Copiar link" trocam o link do signatário; quem estiver no meio da assinatura com o link anterior perde a sessão | O banco só tem o hash do link: o e-mail do lembrete precisa de um link novo. No lembrete, a troca só acontece se o e-mail saiu |
 | 30 | Busca da lista compara com `ilike` (maiúsculas e minúsculas), mas não ignora acento | Sem a extensão `unaccent` no projeto compartilhado; "servico" não acha "serviço" |
 | 31 | CSV da trilha põe um apóstrofo antes de valores que começam com `=`, `+`, `-` ou `@` | Proteção contra injeção de fórmula na planilha; a seção 14 não pedia |
-| 32 | Migrations ainda não aplicadas no remoto | O hook `guard-production.sh` da sessão em que o épico foi feito (pasta do agenda-psi) bloqueou o `apply_migration`; aguardando o Alexandre |
+| 32 | Hash do original presente em mais de um envelope responde `original_multiplo`, sem resumo ("…digite o código que aparece no manifesto…") | O `hash_original` não é único: um modelo público enviado por várias contas mostraria título e assinantes de terceiros a quem tem o modelo (achado do verifier). Com um envelope só, o resumo aparece como no critério |
+| 33 | Envelope não concluído aparece na verificação com o status; "Este envelope ainda não foi concluído." só em enviado e finalizando | A regra 11.11 só exclui rascunhos. O texto da seção 15 existe para esse caso |
+| 34 | O código aceita hífens, minúsculas e as trocas do Crockford (O→0, I/L→1) | Quem copia do papel ou do QR digita como lê; o banco continua com o formato canônico |
+| 35 | Limite por IP só pelo Vercel Firewall, sem contador no app | Critério 8.8 ("regra de firewall"); a regra ainda não foi criada (P8) |
+| 36 | Migrations ainda não aplicadas no remoto | O hook `guard-production.sh` da sessão em que o épico foi feito (pasta do agenda-psi) bloqueou o `apply_migration`; aguardando o Alexandre |

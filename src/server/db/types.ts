@@ -440,6 +440,9 @@ isOneToOne: false
 "as_fn_reserva_notificacao":
 { Args: { "p_id": string,"p_max_tentativas": number }; Returns: boolean
                            },
+"as_fn_resumo_publico":
+{ Args: { "p_envelope_id": string }; Returns: Json
+                           },
 "as_fn_signatario_ativo":
 { Args: { "p_conta_id": string,"p_envelope_id": string,"p_signatario_id": string }; Returns: {
               "assinado_em": string | null,
@@ -547,6 +550,11 @@ isOneToOne: false
 "as_fn_valida_codigo":
 { Args: { "p_codigo_hash": string,"p_ip"?: unknown,"p_max_tentativas": number,"p_signatario_id": string,"p_user_agent"?: string }; Returns: {
               "restantes": number,"resultado": string
+            }[]
+                           },
+"as_fn_verifica_documento":
+{ Args: { "p_codigo": string,"p_hash": string }; Returns: {
+              "envelope": Json,"resultado": string
             }[]
                            },
 "as_fn_verifica_trilha":

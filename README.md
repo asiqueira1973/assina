@@ -88,6 +88,18 @@ O PDF final leva um selo PAdES da plataforma (regra 11.10). O selo só garante a
    openssl cms -verify -binary -inform DER -in s.der -content c.bin -noverify -purpose any -out /dev/null
    ```
 
+## Vercel Firewall (limites por IP)
+
+O app não conta requisições por IP: quem limita é o Vercel Firewall, configurado no painel da Vercel (projeto → **Firewall** → **Configure** → **New Rule**). Cada regra usa a condição **Request Path starts with**, a ação **Rate Limit** e a janela fixa de 60 s por IP. Acima do limite, a resposta é **429**.
+
+| Caminho | Limite | Por quê |
+|---|---|---|
+| `/api/verificar` e `/verificar/` | 30 por minuto | critério 8.8: a consulta é pública (a página do código também consulta o banco) |
+| `/api/assinar/` | 20 por minuto | página do signatário (código por e-mail) |
+| `/api/v1/` e `/mcp` | 120 por minuto | integrações (épicos 8.9 e 8.10) |
+
+Para conferir depois de criar, rode `for i in $(seq 1 35); do curl -s -o /dev/null -w "%{http_code} " "https://assina.app.br/api/verificar?codigo=AAAAAAAAAAAA"; done`: as primeiras 30 respostas são 200 e as seguintes, 429.
+
 ## Licença
 
 MIT. Referência funcional: [SignuDoc](https://github.com/NYLLON-SOFTWARE/signudoc) (MIT); todo código adaptado dele leva atribuição em `THIRD_PARTY_NOTICES.md`.

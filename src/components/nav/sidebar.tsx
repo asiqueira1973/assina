@@ -86,9 +86,9 @@ export function SidebarView({ activeHref, name, email }: Props & { activeHref: s
         <div className={styles.footer}>
           <p className={styles.footerName}>{name}</p>
           <p className={styles.footerEmail}>{email}</p>
-          <a className={styles.footerLink} href="/verificar">
+          <Link className={styles.footerLink} href="/verificar">
             {copy.nav.verify}
-          </a>
+          </Link>
         </div>
       </nav>
     </>

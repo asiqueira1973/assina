@@ -1344,6 +1344,30 @@ $$;
 ALTER FUNCTION "public"."as_fn_reserva_notificacao"("p_id" "uuid", "p_max_tentativas" integer) OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."as_fn_resumo_publico"("p_envelope_id" "uuid") RETURNS "jsonb"
+    LANGUAGE "sql" STABLE
+    SET "search_path" TO ''
+    AS $$
+  select jsonb_build_object(
+    'status', e.status,
+    'titulo', e.titulo,
+    'enviado_em', e.enviado_em,
+    'concluido_em', e.concluido_em,
+    'selo', e.selo,
+    'assinantes', coalesce((
+      select jsonb_agg(jsonb_build_object('nome', s.nome, 'assinado_em', s.assinado_em) order by s.ordem, s.criado_em)
+        from public.as_signatarios s
+       where s.envelope_id = e.id and s.papel = 'assinar'
+    ), '[]'::jsonb)
+  )
+  from public.as_envelopes e
+  where e.id = p_envelope_id
+$$;
+
+
+ALTER FUNCTION "public"."as_fn_resumo_publico"("p_envelope_id" "uuid") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."as_fn_signatario_ativo"("p_conta_id" "uuid", "p_envelope_id" "uuid", "p_signatario_id" "uuid") RETURNS "public"."as_signatarios"
     LANGUAGE "plpgsql"
     SET "search_path" TO ''
@@ -1629,6 +1653,49 @@ $$;
 ALTER FUNCTION "public"."as_fn_valida_codigo"("p_signatario_id" "uuid", "p_codigo_hash" "text", "p_max_tentativas" integer, "p_ip" "inet", "p_user_agent" "text") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."as_fn_verifica_documento"("p_hash" "text", "p_codigo" "text") RETURNS TABLE("resultado" "text", "envelope" "jsonb")
+    LANGUAGE "plpgsql" STABLE
+    SET "search_path" TO ''
+    AS $_$
+declare
+  v_total bigint;
+  v_id uuid;
+begin
+  if p_hash is not null then
+    if p_hash !~ '^[0-9a-f]{64}$' then
+      return;
+    end if;
+    return query
+      select 'final'::text, public.as_fn_resumo_publico(e.id)
+        from public.as_envelopes e join public.as_contas c on c.id = e.conta_id
+       where e.hash_final = p_hash and e.status = 'concluido' and c.suspensa_em is null
+       limit 1;
+    if found then
+      return;
+    end if;
+    select count(*), min(e.id::text)::uuid into v_total, v_id
+      from public.as_envelopes e join public.as_contas c on c.id = e.conta_id
+     where e.hash_original = p_hash and e.status <> 'rascunho' and c.suspensa_em is null;
+    if v_total = 1 then
+      return query select 'original'::text, public.as_fn_resumo_publico(v_id);
+    elsif v_total > 1 then
+      return query select 'original_multiplo'::text, null::jsonb;
+    end if;
+    return;
+  end if;
+  if p_codigo is not null and p_codigo ~ '^[0-9A-HJKMNP-TV-Z]{12}$' then
+    return query
+      select 'codigo'::text, public.as_fn_resumo_publico(e.id)
+        from public.as_envelopes e join public.as_contas c on c.id = e.conta_id
+       where e.codigo_verificacao = p_codigo and e.status <> 'rascunho' and c.suspensa_em is null;
+  end if;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."as_fn_verifica_documento"("p_hash" "text", "p_codigo" "text") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."as_fn_verifica_trilha"("p_envelope_id" "uuid") RETURNS integer
     LANGUAGE "plpgsql" STABLE
     SET "search_path" TO ''
@@ -1908,6 +1975,14 @@ CREATE INDEX "as_entregas_status_idx" ON "public"."as_entregas_webhook" USING "b
 
 
 CREATE INDEX "as_envelopes_conta_criado_idx" ON "public"."as_envelopes" USING "btree" ("conta_id", "criado_em" DESC);
+
+
+
+CREATE INDEX "as_envelopes_hash_final_idx" ON "public"."as_envelopes" USING "btree" ("hash_final") WHERE ("hash_final" IS NOT NULL);
+
+
+
+CREATE INDEX "as_envelopes_hash_original_idx" ON "public"."as_envelopes" USING "btree" ("hash_original") WHERE ("hash_original" IS NOT NULL);
 
 
 
@@ -2280,6 +2355,11 @@ GRANT ALL ON FUNCTION "public"."as_fn_reserva_notificacao"("p_id" "uuid", "p_max
 
 
 
+REVOKE ALL ON FUNCTION "public"."as_fn_resumo_publico"("p_envelope_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_resumo_publico"("p_envelope_id" "uuid") TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."as_fn_signatario_ativo"("p_conta_id" "uuid", "p_envelope_id" "uuid", "p_signatario_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."as_fn_signatario_ativo"("p_conta_id" "uuid", "p_envelope_id" "uuid", "p_signatario_id" "uuid") TO "service_role";
 
@@ -2311,6 +2391,11 @@ GRANT ALL ON FUNCTION "public"."as_fn_valida_campo"() TO "service_role";
 
 REVOKE ALL ON FUNCTION "public"."as_fn_valida_codigo"("p_signatario_id" "uuid", "p_codigo_hash" "text", "p_max_tentativas" integer, "p_ip" "inet", "p_user_agent" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."as_fn_valida_codigo"("p_signatario_id" "uuid", "p_codigo_hash" "text", "p_max_tentativas" integer, "p_ip" "inet", "p_user_agent" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."as_fn_verifica_documento"("p_hash" "text", "p_codigo" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_verifica_documento"("p_hash" "text", "p_codigo" "text") TO "service_role";
 
 
 
