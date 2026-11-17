@@ -1,0 +1,15 @@
+/* Tela Conta (seção 16): cartão cinza sem borda e Sair como ação discreta. */
+.card { min-height: 72px; padding: 16px 20px; border-radius: var(--radius-row); background: var(--surface); margin-bottom: 16px; }
+.name { margin: 0; font-size: 17px; font-weight: 600; }
+.email { margin: 4px 0 0; font-size: 15px; color: var(--text-secondary); }
+.signOut {
+  min-height: var(--tap);
+  padding: 0 20px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--red);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
