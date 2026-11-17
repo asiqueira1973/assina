@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Versão | 0.4 (17/11/2026: épico 8.1 — canônico da trilha em linhas (11.6), `as_fn_entra_conta` e congelamento refinado (7.5)) · 0.3 (17/11/2026: arquivos no Cloudflare R2, fora do Supabase; 25.3 respondida) · 0.2 (17/11/2026: níveis 1, 2 e 3 com limite de documentos, regra 11.20; armazenamento atrás de uma interface única, seção 18) · 0.1 (17/11/2026: nome Assina, domínio assina.app.br; nome de trabalho anterior "Firma" descartado porque firma.app.br já tinha dono) |
+| Versão | 0.5 (17/11/2026: épico 8.2 — textos do rascunho na seção 15; `as_fn_cria_rascunho`, `as_fn_substitui_signatarios`, ordem diferida e rota `/upload`) · 0.4 (17/11/2026: épico 8.1 — canônico da trilha em linhas (11.6), `as_fn_entra_conta` e congelamento refinado (7.5)) · 0.3 (17/11/2026: arquivos no Cloudflare R2, fora do Supabase; 25.3 respondida) · 0.2 (17/11/2026: níveis 1, 2 e 3 com limite de documentos, regra 11.20; armazenamento atrás de uma interface única, seção 18) · 0.1 (17/11/2026: nome Assina, domínio assina.app.br; nome de trabalho anterior "Firma" descartado porque firma.app.br já tinha dono) |
 | Responsável de produto | Alexandre Siqueira (DabLab) |
 | Status | pronto para revisão |
 | Data | 17/11/2026 |
@@ -345,7 +345,7 @@ as_contas 1 ──── N as_credenciais N ──── 0..1 as_oauth_clientes 
 | `prazo_em` | timestamptz | sim | — | preenchido no envio = `enviado_em + prazo_dias`; nulo em rascunho |
 | `lembrete_cada_dias` | smallint | sim | `3` | nulo = sem lembrete automático; check em (2, 3, 7) |
 | `nome_arquivo` | text | sim | — | nome original do PDF, máx. 200; nulo até o upload |
-| `arquivo_original_path` | text | sim | — | `{conta_id}/{id}/original.pdf`; nulo até o upload ou depois do expurgo (11.14) |
+| `arquivo_original_path` | text | sim | — | `{conta_id}/{id}/original-{versao}.pdf` (um caminho por troca de arquivo, v0.5); nulo até o upload ou depois do expurgo (11.14) |
 | `tamanho_bytes` | integer | sim | — | nulo até o upload |
 | `paginas` | smallint | sim | — | nulo até validar (11.1) |
 | `dimensoes_paginas` | jsonb | sim | — | `[{"l":595.28,"a":841.89}, …]` em pontos; nulo até validar |
@@ -402,7 +402,7 @@ as_contas 1 ──── N as_credenciais N ──── 0..1 as_oauth_clientes 
 | `lembretes_enviados` | smallint | não | `0` | máx. 10 (11.5) |
 | `criado_em` | timestamptz | não | `now()` | |
 
-Índice único `as_signatarios_email_uk` em (`envelope_id`, `email`). Índice único parcial `as_signatarios_ordem_uk` em (`envelope_id`, `ordem`) `where papel = 'assinar'`.
+Índice único `as_signatarios_email_uk` em (`envelope_id`, `email`). Ordem única entre os assinantes: exclusion constraint `as_signatarios_ordem_ex` (`btree_gist`) em (`envelope_id` =, `ordem` =) `where papel = 'assinar'`, **`DEFERRABLE INITIALLY DEFERRED`**, para reordenar numa transação sem colisão no meio do caminho (v0.5, épico 8.2).
 
 **`as_campos`**
 
@@ -498,6 +498,9 @@ as_contas 1 ──── N as_credenciais N ──── 0..1 as_oauth_clientes 
 | `as_fn_verifica_trilha(envelope_id)` | função (só leitura) | `as_eventos` | recalcula a cadeia e devolve o primeiro `seq` quebrado ou nulo. Usada no teste e na página de detalhe |
 | `as_fn_evento_canonico(...)` | função (só leitura) | `as_eventos` | monta o texto canônico de um evento (regra 11.6); usada pelo registro e pela verificação |
 | `as_fn_entra_conta(google_sub, email, nome, chave_hash, chave_prefixo, chave_cifrada)` | função | `as_contas`, `as_credenciais` | login do remetente (seção 6.1): conta nova nasce **na mesma transação** que a chave de API (regra 11.8); conta existente atualiza só o e-mail; suspensa não é tocada. Devolve `conta_id`, `nova` e `suspensa` |
+| `as_fn_cria_rascunho(conta_id, titulo, origem, codigo_verificacao, ator, ip, user_agent)` | função | `as_envelopes`, `as_eventos` | cria o envelope em rascunho e registra o evento `criado` na mesma transação (princípio 1, épico 8.2) |
+| `as_fn_substitui_signatarios(envelope_id, conta_id, lista)` | função | `as_signatarios`, `as_campos` | troca a lista de destinatários de um rascunho (regra 11.2): só da conta (`nao_encontrado`) e só em rascunho (`envelope_congelado`); recusa e-mail repetido (`email_repetido`), mais de 10 assinantes (`assinantes_demais`) ou 5 cópias (`copias_demais`); mantém o id (e os campos) de quem continua pelo e-mail, apaga quem saiu, renumera a ordem pela posição e tira os campos de quem virou cópia |
+| `as_fn_anexa_arquivo(envelope_id, conta_id, caminho, nome, tamanho, paginas, dimensoes)` | função | `as_envelopes`, `as_campos` | troca atômica do arquivo do rascunho (épico 8.2, princípio 2): com o envelope travado, confere conta e rascunho, apaga os campos e aponta para o arquivo novo, que o servidor já validou e gravou num caminho por versão; devolve o caminho anterior (que o servidor apaga) e se havia campos |
 
 Os erros de negócio sobem com `MESSAGE` igual ao código, e o servidor traduz para a copy da seção 15.
 
@@ -866,7 +869,8 @@ Ficam em `src/app/api/painel/*` e `src/app/api/assinar/[token]/*`, todas com `re
 |---|---|---|
 | POST | `/api/painel/envelopes` | cria rascunho e devolve `upload_url` |
 | PATCH | `/api/painel/envelopes/{id}` | título, mensagem, ordem, prazo, lembrete |
-| POST | `/api/painel/envelopes/{id}/arquivo` | valida o arquivo enviado (11.1) |
+| POST | `/api/painel/envelopes/{id}/upload` | URL nova de upload para trocar o arquivo do rascunho (v0.5, épico 8.2) |
+| POST | `/api/painel/envelopes/{id}/arquivo` | valida o arquivo enviado em `upload.pdf` (11.1) e só então o promove a `original.pdf`; arquivo inválido não destrói o anterior |
 | PUT | `/api/painel/envelopes/{id}/signatarios` | substitui a lista (rascunho) |
 | PUT | `/api/painel/envelopes/{id}/campos` | substitui os campos (rascunho) |
 | POST | `/api/painel/envelopes/{id}/enviar` · `/cancelar` · `/signatarios/{sid}/lembrar` · `/signatarios/{sid}/link` | ações |
@@ -971,7 +975,10 @@ O tom é direto, cordial, sem exclamação e sem jargão jurídico além do nece
 | Status do envelope | `rascunho` "Rascunho" · `enviado` "Aguardando" · `finalizando` "Finalizando" · `concluido` "Concluído" · `recusado` "Recusado" · `cancelado` "Cancelado" · `expirado` "Expirado" |
 | Status do signatário | "Aguardando a vez" · "Aguardando" · "Assinou em {data}" · "Recusou em {data}" · "Recebe cópia" |
 | Upload | "Arraste o PDF aqui ou escolha um arquivo" / "Até 10 MB e 100 páginas." |
-| Erros de arquivo | "Isso não é um PDF." / "O arquivo passa de 10 MB." / "O PDF tem mais de 100 páginas." / "Este PDF está protegido por senha. Tire a senha e tente de novo." / "Não consegui baixar o arquivo desse endereço." |
+| Erros de arquivo | "Isso não é um PDF." / "O arquivo passa de 10 MB." / "O PDF tem mais de 100 páginas." / "Este PDF está protegido por senha. Tire a senha e tente de novo." / "As páginas deste PDF são grandes demais (máximo de 50 × 50 cm)." / "Não consegui baixar o arquivo desse endereço." |
+| Rascunho, campos (v0.5) | "Título" · "Mensagem (opcional)" · "Nome" · "E-mail" · "Trocar" · "Remover" · "Subir" / "Descer" (rótulos de acessibilidade da ordem) · "Enviando o arquivo… {n}%" · "Conferindo o arquivo…" |
+| Rascunho, salvamento (v0.5) | "Salvando…" / "Rascunho salvo." / "Não consegui salvar. Tente de novo." |
+| Arquivo já assinado (v0.5, regra 11.1) | "Este PDF já foi assinado eletronicamente. Essa assinatura deixa de valer depois das novas." |
 | Destinatários | "Quem recebe" · "Adicionar pessoa" · "Assina" / "Recebe cópia" · "Pedir CPF" · "Assinar em ordem" |
 | Erros de destinatário | "Esse e-mail já está na lista." / "Até 10 pessoas assinam um documento." / "Adicione pelo menos uma pessoa para assinar." |
 | Configurações | "Prazo para assinar" ("{n} dias") · "Lembrete automático" ("A cada 2 dias", "A cada 3 dias", "A cada 7 dias", "Sem lembrete") |

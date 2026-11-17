@@ -194,7 +194,8 @@ Table as_envelopes {
 }
 
 // Índice único as_signatarios_email_uk em (envelope_id, email).
-// Índice único parcial as_signatarios_ordem_uk em (envelope_id, ordem) where papel = 'assinar'.
+// Ordem única entre assinantes: exclusion constraint as_signatarios_ordem_ex (btree_gist) em (envelope_id =, ordem =)
+// where papel = 'assinar', DEFERRABLE INITIALLY DEFERRED (reordenar numa transação, épico 8.2).
 // Trigger as_tg_filhos_congelados: fora de rascunho, nome/email/papel/ordem/exigir_cpf não mudam; sem insert/delete.
 Table as_signatarios {
   id uuid [pk, default: `gen_random_uuid()`]

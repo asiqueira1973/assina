@@ -4,7 +4,7 @@ Descreve o sistema **como está implementado**, não como foi planejado (spec.md
 
 | | |
 |---|---|
-| Estado | Épicos 8.0 e 8.1 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (ver seção 6) |
+| Estado | Épicos 8.0, 8.1 e 8.2 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
 | Stack | Next.js 16.4.6 (App Router, Cache Components, `proxy.ts`), React 19.3, TypeScript, Supabase Postgres (projeto compartilhado, prefixo `as_`), Vitest, pgTAP |
 
 ---
@@ -20,7 +20,7 @@ Banco em português, prefixo `as_`. Toda tabela com RLS ligado e **nenhuma polí
 | `as_oauth_clientes` | Clientes MCP (Claude, ChatGPT) que se registram sozinhos | `id` é o `client_id`; `redirect_uris` de 1 a 5 |
 | `as_oauth_codigos` | Código de autorização do OAuth do MCP, de uso único | `codigo_hash`: só o hash; `expira_em`: 10 min; `usado_em`: nulo até ser trocado |
 | `as_envelopes` | Um documento enviado para assinatura | `status`: ver enum. `origem`: por onde nasceu (painel, API ou MCP). `hash_original`: SHA-256 do PDF, preenchido no envio e nunca mais alterado. `codigo_verificacao`: 12 caracteres base32 Crockford, impresso no manifesto. `arquivos_expurgados_em`: quando a faxina apagou os arquivos de um envelope encerrado sem conclusão |
-| `as_signatarios` | Quem assina (`assinar`) ou só recebe cópia (`copia`) | `token_hash`: SHA-256 do token do link (o link em si não fica no banco). `ordem`: 1–10, única entre os assinantes do envelope. `codigo_*`: o código de 6 dígitos atual e seus contadores. `ip_assinatura`/`user_agent_assinatura`: evidência do momento da assinatura |
+| `as_signatarios` | Quem assina (`assinar`) ou só recebe cópia (`copia`) | `token_hash`: SHA-256 do token do link (o link em si não fica no banco). `ordem`: 1–10, única entre os assinantes do envelope (exclusion constraint diferida, para reordenar numa transação); nas cópias é sempre 1 e não significa nada. `codigo_*`: o código de 6 dígitos atual e seus contadores. `ip_assinatura`/`user_agent_assinatura`: evidência do momento da assinatura |
 | `as_campos` | Campos posicionados no PDF | `x`, `y`, `largura`, `altura` em fração da página (0–1, origem no canto superior esquerdo); o campo nunca passa da borda (check). `valor`: preenchido na assinatura |
 | `as_eventos` | Trilha de auditoria | Só inserção. `seq` 1, 2, 3… por envelope. `hash` encadeado no `hash_anterior` (regra 11.6). `ocorrido_em`: relógio do banco |
 | `as_notificacoes` | Cada e-mail a enviar, para não repetir e para retentar | `chave`: idempotência (o mesmo e-mail não sai duas vezes) |
@@ -73,11 +73,14 @@ Fonte: `supabase/migrations/20261117130100_as_logica.sql`. Toda função com `se
 | `as_tg_filhos_congelados` | trigger BEFORE INSERT/UPDATE/DELETE | `as_signatarios`, `as_campos` | qualquer escrita | com o envelope fora de rascunho, ninguém entra nem sai e nome, e-mail, ordem e coordenadas não mudam; status, código, assinatura, token e valor continuam mudando |
 | `as_tg_valida_campo` | trigger BEFORE INSERT/UPDATE | `as_campos` | escrita de campo | página existe no PDF e o campo é de um assinante do mesmo envelope (`campo_invalido`) |
 | `as_fn_transicao_envelope` | função | `as_envelopes` | servidor, a cada mudança de status | muda o status só se ele ainda é o esperado; devolve se mudou (trava de concorrência) |
+| `as_fn_cria_rascunho` | função | `as_envelopes`, `as_eventos` | criar envelope (painel, API, MCP) | cria o rascunho e o evento `criado` na mesma transação |
+| `as_fn_substitui_signatarios` | função | `as_signatarios`, `as_campos` | salvar a lista de destinatários | troca a lista de um rascunho da conta: recusa e-mail repetido e limites (10 assinantes, 5 cópias); mantém quem continua (e os campos), apaga quem saiu, renumera a ordem pela posição, tira os campos de quem virou cópia |
+| `as_fn_anexa_arquivo` | função | `as_envelopes`, `as_campos` | depois de validar um PDF | com o envelope travado e ainda em rascunho, apaga os campos e aponta para o arquivo novo (caminho por versão); devolve o caminho anterior para o servidor apagar |
 | `as_fn_entra_conta` | função | `as_contas`, `as_credenciais` | login | cria a conta já com a chave de API, na mesma transação; conta existente atualiza só o e-mail; suspensa não é tocada |
 
-Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `envelope_congelado`, `envelope_em_andamento`, `status_mudou`, `campo_invalido`).
+Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `envelope_congelado`, `envelope_em_andamento`, `status_mudou`, `campo_invalido`, `nao_encontrado`, `email_repetido`, `assinantes_demais`, `copias_demais`).
 
-## 4. Mapa tela → tabelas (até o 8.1)
+## 4. Mapa tela → tabelas (até o 8.2)
 
 | Tela / rota | Lê | Escreve | Passa por |
 |---|---|---|---|
@@ -89,12 +92,24 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | `/painel` (Envelopes, estado vazio) | — | — | — |
 | `/painel/conta` | `as_contas` | — | `getCurrentAccount` |
 | `POST /sair` | — | apaga o cookie | confere o Origin |
+| `/painel/envelopes/novo` | — | via as rotas abaixo | — |
+| `POST /api/painel/envelopes` | — | `as_envelopes`, `as_eventos` | `requireConta`, `as_fn_cria_rascunho`, URL de upload |
+| `POST /api/painel/envelopes/{id}/upload` | `as_envelopes` | — | `requireConta`, URL de upload |
+| `POST /api/painel/envelopes/{id}/arquivo` | `as_envelopes`, arquivo `upload.pdf` | arquivo `original-{versao}.pdf`, e por `as_fn_anexa_arquivo` `as_envelopes` (arquivo, páginas, dimensões) e `as_campos` (apaga na troca) | `requireConta`, `validatePdf`, `as_fn_anexa_arquivo` |
+| `/painel/envelopes/{id}/editar` | `as_envelopes`, `as_signatarios` | via PATCH e PUT | `getCurrentAccount` |
+| `PATCH /api/painel/envelopes/{id}` | `as_envelopes` | `as_envelopes` (título, mensagem, ordem, prazo, lembrete) | `requireConta` |
+| `PUT /api/painel/envelopes/{id}/signatarios` | — | `as_signatarios`, `as_campos` | `requireConta`, `as_fn_substitui_signatarios` |
+| `PUT/GET /api/dev/arquivos/{caminho}` (só dev) | arquivo local | arquivo local | HMAC + validade; 404 em produção ou com R2 |
 
 ## 5. Lógica por tela
 
 - **Login:** `/api/auth/google` gera state e PKCE, guarda os dois e a rota de volta (saneada: só `/painel…` e `/oauth/autorizar…`) num cookie de 10 min e vai ao Google com `openid email profile`. O callback confere o state, troca o código com o verifier, valida o `id_token` (assinatura, `aud`, `iss`, `exp`, `email_verified`), aplica bloqueados, permitidos, suspensão e o limite diário de contas novas **antes de gravar qualquer coisa**, gera a chave de API e chama `as_fn_entra_conta`. Qualquer falha volta para `/entrar?erro=…` com a frase da seção 15.
 - **Proxy:** `/painel*` sem sessão válida vai para `/entrar?volta=<rota>`; sessão com mais de 7 dias é renovada; `/` redireciona para o painel ou para `/entrar` até a página inicial existir.
 - **Painel:** o layout lê a conta (conta suspensa conta como inexistente) e, sem aceite, mostra só as boas-vindas. O aceite é um POST; o painel só aparece depois que o servidor confirmou (`router.refresh`), nunca por estado local.
+
+- **Novo envelope:** escolher o PDF cria o rascunho (`POST /api/painel/envelopes`, título do nome do arquivo), sobe direto para o armazenamento pela URL assinada (progresso por XHR) e pede a validação. O servidor lê `upload.pdf` numa leitura só, limitada a 10 MB (no R2, com `Range`), apaga o upload, valida a regra 11.1 (`%PDF-`, 10 MB, senha, 1–100 páginas, página ≤ 1.440 pt) e grava **os mesmos bytes que validou** em `original-{versao}.pdf`; `as_fn_anexa_arquivo` aponta o envelope para ele numa transação e o original anterior é apagado. Arquivo inválido: nada muda e a tela mostra a frase da seção 15. Troca válida apaga os campos e avisa. PDF já assinado digitalmente passa, com aviso.
+- **Editar rascunho:** o estado da tela é o que a pessoa digita; cada mudança é gravada com debounce de 800 ms (PATCH das configurações, PUT da lista inteira). A lista só é enviada se estiver válida (nome, e-mail, sem repetido). "Rascunho salvo." só depois da resposta do servidor; falha mostra "Não consegui salvar. Tente de novo." Os botões de avançar só liberam com arquivo, título e ao menos um assinante **salvo**, sem gravação pendente nem erro.
+- **Armazenamento:** `src/server/files/storage.ts` escolhe o driver. `r2` com as variáveis `R2_*`; `local` (disco em `.armazenamento-local/`, URLs com HMAC servidas por `/api/dev/arquivos`) só fora de produção; em produção sem R2 o app falha.
 
 ## 6. Divergências em relação ao spec
 
@@ -109,4 +124,7 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | 7 | Next 16.4.6 em vez de 16.4.3 | 16.4.3 tem alerta moderado de segurança (GHSA-mfr8-8qww-v76h) |
 | 8 | Dois triggers a mais em `as_envelopes` (`as_tg_envelope_nasce_rascunho`, `as_tg_envelope_exclusao`), já no spec | Achados do verifier no 8.1: um INSERT pulava a máquina de estado, e a 7.4 (não excluir envelope em andamento) dependia só do servidor |
 | 9 | Bucket R2 ainda não criado | Precisa da conta Cloudflare da DabLab (README, seção R2); entra antes do 8.2, que é o primeiro épico a usar arquivo |
-| 10 | Migrations ainda não aplicadas no remoto | O hook `guard-production.sh` da sessão em que o épico foi feito (pasta do agenda-psi) bloqueou o `apply_migration`; aguardando o Alexandre |
+| 10 | Upload em duas etapas (`upload.pdf` → `original-{versao}.pdf`, gravando os bytes validados), troca atômica por `as_fn_anexa_arquivo` e rota extra `POST /api/painel/envelopes/{id}/upload` (spec v0.5) | Validar antes de substituir; o arquivo gravado é exatamente o validado (a URL de upload vale 2 h); um envio concorrente nunca vê arquivo pela metade |
+| 11 | Driver local de arquivos e rota `/api/dev/arquivos` (só dev) | O bucket R2 ainda não existe (P2); a interface única permite trocar sem tocar no domínio |
+| 12 | Ordem dos assinantes como exclusion constraint diferida, e não índice único parcial (spec v0.5) | Reordenar dentro de uma transação colidia no índice |
+| 13 | Migrations ainda não aplicadas no remoto | O hook `guard-production.sh` da sessão em que o épico foi feito (pasta do agenda-psi) bloqueou o `apply_migration`; aguardando o Alexandre |

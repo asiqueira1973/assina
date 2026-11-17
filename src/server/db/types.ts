@@ -250,7 +250,50 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "as_fn_entra_conta":
+            "as_fn_anexa_arquivo":
+{ Args: { "p_caminho": string,"p_conta_id": string,"p_dimensoes": Json,"p_envelope_id": string,"p_nome": string,"p_paginas": number,"p_tamanho": number }; Returns: {
+              "caminho_anterior": string,"campos_removidos": boolean
+            }[]
+                           },
+"as_fn_cria_rascunho":
+{ Args: { "p_ator": Database["public"]['Enums']["as_ator"],"p_codigo_verificacao": string,"p_conta_id": string,"p_ip"?: unknown,"p_origem": Database["public"]['Enums']["as_origem"],"p_titulo": string,"p_user_agent"?: string }; Returns: {
+              "arquivo_final_path": string | null,
+"arquivo_original_path": string | null,
+"arquivos_expurgados_em": string | null,
+"atualizado_em": string,
+"chave_idempotencia": string | null,
+"codigo_verificacao": string,
+"concluido_em": string | null,
+"conta_id": string,
+"criado_em": string,
+"dimensoes_paginas": Json | null,
+"em_ordem": boolean,
+"encerrado_em": string | null,
+"enviado_em": string | null,
+"hash_final": string | null,
+"hash_original": string | null,
+"id": string,
+"lembrete_cada_dias": number | null,
+"mensagem": string | null,
+"motivo_cancelamento": string | null,
+"nome_arquivo": string | null,
+"origem": Database["public"]['Enums']["as_origem"],
+"paginas": number | null,
+"prazo_dias": number,
+"prazo_em": string | null,
+"selo": string | null,
+"status": Database["public"]['Enums']["as_status_envelope"],
+"tamanho_bytes": number | null,
+"tentativas_finalizacao": number,
+"titulo": string
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "as_envelopes"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"as_fn_entra_conta":
 { Args: { "p_chave_cifrada": string,"p_chave_hash": string,"p_chave_prefixo": string,"p_email": string,"p_google_sub": string,"p_nome": string }; Returns: {
               "conta_id": string,"nova": boolean,"suspensa": boolean
             }[]
@@ -278,6 +321,46 @@ isOneToOne: false
         to: "as_eventos"
         isOneToOne: true
         isSetofReturn: false
+      } },
+"as_fn_substitui_signatarios":
+{ Args: { "p_conta_id": string,"p_envelope_id": string,"p_lista": Json }; Returns: {
+              "assinado_em": string | null,
+"assinatura_imagem_path": string | null,
+"assinatura_texto": string | null,
+"codigo_expira_em": string | null,
+"codigo_hash": string | null,
+"codigo_tentativas": number,
+"codigos_enviados_hora": number,
+"consentimento_versao": string | null,
+"conta_id": string,
+"cpf": string | null,
+"criado_em": string,
+"email": string,
+"envelope_id": string,
+"exigir_cpf": boolean,
+"id": string,
+"ip_assinatura": unknown,
+"janela_codigos_desde": string | null,
+"lembretes_enviados": number,
+"metodo_assinatura": Database["public"]['Enums']["as_metodo_assinatura"] | null,
+"motivo_recusa": string | null,
+"nome": string,
+"notificado_em": string | null,
+"ordem": number,
+"papel": Database["public"]['Enums']["as_papel"],
+"recusado_em": string | null,
+"rubrica_imagem_path": string | null,
+"rubrica_texto": string | null,
+"status": Database["public"]['Enums']["as_status_signatario"],
+"token_hash": string,
+"ultimo_lembrete_em": string | null,
+"user_agent_assinatura": string | null
+            }[]
+                          SetofOptions: {
+        from: "*"
+        to: "as_signatarios"
+        isOneToOne: false
+        isSetofReturn: true
       } },
 "as_fn_transicao_envelope":
 { Args: { "p_de": Database["public"]['Enums']["as_status_envelope"],"p_envelope_id": string,"p_para": Database["public"]['Enums']["as_status_envelope"] }; Returns: boolean
