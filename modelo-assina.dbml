@@ -1,4 +1,5 @@
 // Assina — modelo de dados (spec.md, seção 7). Projeto Supabase compartilhado, prefixo as_.
+// Arquivos (PDFs e imagens de assinatura) ficam no Cloudflare R2, bucket assina-documentos; os *_path são relativos ao bucket.
 // RLS ligado e SEM política em todas as tabelas; REVOKE ALL de anon/authenticated (seção 6.5).
 // Timestamps em UTC. Coordenadas de campo em fração da página (0–1, origem no canto superior esquerdo).
 

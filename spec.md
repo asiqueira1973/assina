@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Versão | 0.2 (17/11/2026: níveis 1, 2 e 3 com limite de documentos, regra 11.20; armazenamento atrás de uma interface única, seção 18) · 0.1 (17/11/2026: nome Assina, domínio assina.app.br; nome de trabalho anterior "Firma" descartado porque firma.app.br já tinha dono) |
+| Versão | 0.3 (17/11/2026: arquivos no Cloudflare R2, fora do Supabase; 25.3 respondida) · 0.2 (17/11/2026: níveis 1, 2 e 3 com limite de documentos, regra 11.20; armazenamento atrás de uma interface única, seção 18) · 0.1 (17/11/2026: nome Assina, domínio assina.app.br; nome de trabalho anterior "Firma" descartado porque firma.app.br já tinha dono) |
 | Responsável de produto | Alexandre Siqueira (DabLab) |
 | Status | pronto para revisão |
 | Data | 17/11/2026 |
@@ -101,7 +101,7 @@ Produto gratuito da **DabLab** (Alexandre da Silva de Siqueira LTDA - ME, CNPJ 6
 |---|---|---|---|
 | Framework | **Next.js 16** (App Router, Cache Components, `proxy.ts`), React 19, TypeScript, na mesma linha do Reunião (16.4.x) | Reaproveita os guardrails e o que se aprendeu no Reunião | Outro framework: stack novo sem ganho |
 | Banco | **Supabase Postgres, projeto compartilhado "BANCO DE TESTE"** (`jeesdmfcrmhyufwzwzwt`), tabelas com **prefixo `as_`** (livre em 17/11/2026; `btree_gist`, `pgcrypto` e `pg_cron` já instalados) | Decisão do Alexandre (17/11/2026): custo zero e o mesmo arranjo do Reunião | Projeto próprio: isola melhor os PDFs, mas é mais um projeto para manter. Plano de saída no risco 23.1 |
-| Arquivos | **Supabase Storage**, bucket **privado** `as-documentos` no mesmo projeto. Upload e download só por **URL assinada** de curta duração | O PDF nunca passa pelo corpo de uma função, que no Vercel tem limite de cerca de 4,5 MB | Vercel Blob: mais um fornecedor e mais uma credencial |
+| Arquivos | **Cloudflare R2**, bucket **privado** `assina-documentos` (sem domínio público nem `r2.dev`), pela API compatível com S3 (`@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`). Upload e download só por **URL pré-assinada** de curta duração. CORS do bucket libera `PUT`/`GET` só para `https://assina.app.br` e `http://localhost:3030` | Decisão do Alexandre (17/11/2026): não aumentar o custo do Supabase. O R2 tem camada gratuita de 10 GB por mês e **saída gratuita**, que importa porque todo mundo baixa o PDF final. O PDF nunca passa pelo corpo de uma função (limite de cerca de 4,5 MB no Vercel) | Supabase Storage: 1 GB gratuito dividido com todos os apps do projeto compartilhado. Vercel Blob: cobra a saída |
 | Acesso ao banco | **Só pelo servidor**, com service role, em `src/server/db/`. RLS **ligado e sem nenhuma política** em todas as `as_*`, com `REVOKE ALL` de `anon` e `authenticated` | Igual ao Reunião: não há Supabase Auth e o banco nunca é tocado do navegador | Supabase Auth com RLS por `auth.uid()`: mexeria na Auth do projeto compartilhado inteiro |
 | Login do remetente | **OAuth do Google próprio**, só com `openid email profile`, e sessão em cookie `HttpOnly` com JWT HS256 (`jose`) | Escopos não sensíveis: não precisa da verificação do Google, só da verificação da marca | Supabase Auth: mesmo motivo da linha acima |
 | Identificação do signatário | Link com token de 32 bytes mais **código de 6 dígitos por e-mail** (regra 11.4) | É o que prova o controle do e-mail, a principal evidência de autoria | Só o link: qualquer pessoa com o e-mail encaminhado assinaria |
@@ -118,8 +118,8 @@ Produto gratuito da **DabLab** (Alexandre da Silva de Siqueira LTDA - ME, CNPJ 6
 | Repositório | `~/assina`, GitHub **público** `assina`, licença **MIT** | Mesmo padrão dos outros projetos abertos | — |
 
 **Premissas a validar no épico 8.1:**
-- (a) Nenhum objeto `as_*` e nenhum bucket `as-documentos` existem no remoto.
-- (b) O limite de Storage do projeto compartilhado comporta o volume da regra 11.13 (risco 23.1).
+- (a) Nenhum objeto `as_*` existe no remoto.
+- (b) A camada gratuita do R2 (10 GB-mês de armazenamento, 1 milhão de operações classe A e 10 milhões classe B por mês, saída gratuita) ainda vale nesses números na data da implementação; se mudou, registrar no plano e avisar.
 - (c) `@signpdf` + `node-forge` rodam no runtime Node da Vercel sem módulo nativo.
 - (d) Uma TSA gratuita responde do Vercel em menos de 5 s (regra 11.10).
 
@@ -127,7 +127,7 @@ Fluxo principal:
 
 ```
 Remetente → /painel/envelopes/novo ─POST /api/painel/envelopes─▶ servidor: cria rascunho + URL assinada de upload
-           navegador ─PUT PDF─▶ Storage (as-documentos/{conta}/{envelope}/original.pdf)
+           navegador ─PUT PDF─▶ R2 (assina-documentos/{conta}/{envelope}/original.pdf)
            posiciona campos ─PUT /api/painel/envelopes/{id}/campos─▶ servidor
            "Enviar" ─POST /api/painel/envelopes/{id}/enviar─▶ servidor: valida PDF (11.1), SHA-256, congela,
                                                             status enviado, evento "enviado", convites (Resend)
@@ -233,7 +233,7 @@ As URLs dos metadados vêm de `NEXT_PUBLIC_SITE_URL`, nunca do `Host` da requisi
 
 ### 6.5 Autorização no banco
 
-Todas as tabelas `as_*` têm `ENABLE ROW LEVEL SECURITY` e **nenhuma política**, além de `REVOKE ALL` de `anon` e `authenticated`. O bucket `as-documentos` é privado e sem política para `anon` nem `authenticated`. A service role ignora RLS, então **toda consulta do servidor filtra por `conta_id` ou `token_hash`**, e quem garante isso são os helpers de `src/server/db/`.
+Todas as tabelas `as_*` têm `ENABLE ROW LEVEL SECURITY` e **nenhuma política**, além de `REVOKE ALL` de `anon` e `authenticated`. O bucket `assina-documentos` do R2 é privado: sem domínio público, sem `r2.dev`, e só o servidor tem a credencial (token de API do R2 restrito a esse bucket, com leitura e escrita de objetos). A service role ignora RLS, então **toda consulta do servidor filtra por `conta_id` ou `token_hash`**, e quem garante isso são os helpers de `src/server/db/`.
 
 ---
 
@@ -389,7 +389,7 @@ as_contas 1 ──── N as_credenciais N ──── 0..1 as_oauth_clientes 
 | `consentimento_versao` | text | sim | — | ex. `"2026-11-17"`; nulo até consentir |
 | `metodo_assinatura` | `as_metodo_assinatura` | sim | — | nulo até assinar |
 | `assinatura_texto` | text | sim | — | nome digitado (`digitada`); máx. 100 |
-| `assinatura_imagem_path` | text | sim | — | PNG em Storage (`desenhada`) |
+| `assinatura_imagem_path` | text | sim | — | PNG no R2 (`desenhada`) |
 | `rubrica_texto` | text | sim | — | iniciais; nulo se não houver campo rubrica |
 | `rubrica_imagem_path` | text | sim | — | |
 | `ip_assinatura` | inet | sim | — | IP no momento de assinar ou recusar |
@@ -474,12 +474,12 @@ as_contas 1 ──── N as_credenciais N ──── 0..1 as_oauth_clientes 
 
 | Entidade | Estratégia | Motivo |
 |---|---|---|
-| `as_envelopes` em `rascunho` | hard delete (cascata e arquivos do Storage) | nada foi enviado a ninguém |
+| `as_envelopes` em `rascunho` | hard delete (cascata e arquivos do R2) | nada foi enviado a ninguém |
 | `as_envelopes` em status final (`concluido`, `recusado`, `cancelado`, `expirado`) | hard delete pelo remetente, com confirmação digitando o título; cascata na trilha e nos arquivos. A partir daí, a verificação responde "não encontrado" | O remetente é o controlador (seção 20). Os signatários já receberam o PDF final por e-mail |
 | `as_envelopes` em `enviado` ou `finalizando` | **não pode excluir**: primeiro cancela | Não some com documento que alguém está assinando |
-| Arquivos de envelopes não concluídos | expurgo automático (regra 11.14), linha e trilha mantidas | Economiza Storage sem perder a prova do que aconteceu |
+| Arquivos de envelopes não concluídos | expurgo automático (regra 11.14), linha e trilha mantidas | Economiza armazenamento sem perder a prova do que aconteceu |
 | `as_eventos` | nunca alterados nem apagados isoladamente; só caem em cascata com o envelope ou a conta (trigger 7.5) | Princípio 1 |
-| `as_contas` | hard delete pelo remetente (cascata em tudo, mais a pasta `{conta_id}/` do Storage) | Direito de exclusão |
+| `as_contas` | hard delete pelo remetente (cascata em tudo, mais o prefixo `{conta_id}/` do R2) | Direito de exclusão |
 | `as_oauth_codigos` | apagados pela faxina 24 h depois de expirar | Sem valor depois de usado |
 
 ### 7.5 Lógica no banco
@@ -501,7 +501,7 @@ Os erros de negócio sobem com `MESSAGE` igual ao código, e o servidor traduz p
 
 - Migrations ficam em `supabase/migrations/` e são aplicadas no remoto pelo MCP `apply_migration` com o mesmo SQL do arquivo. **Nunca `supabase db push`** no projeto compartilhado. Migration versionada não se edita.
 - Depois de aplicar, rodar `get_advisors` (security e performance) filtrando `as_*` e regenerar `supabase/schema.sql` filtrado ao prefixo `as_` no mesmo commit.
-- O bucket `as-documentos` é criado por migration (`insert into storage.buckets … public = false, file_size_limit = 10485760, allowed_mime_types = '{application/pdf,image/png}'`).
+- O bucket `assina-documentos` do R2 é criado à mão no painel da Cloudflare (README, com a regra de CORS e o token restrito ao bucket). Não há bucket no Supabase.
 - Não há seed de dados. Os testes criam a fixture própria e limpam só ela.
 - Supabase local nas portas **555xx** (API 55521, DB 55522). As faixas 543xx, 553xx e 554xx são de outros projetos.
 
@@ -528,8 +528,8 @@ Criar os arquivos do Anexo B, tornar os scripts executáveis e testar cada hook 
 
 **Fluxo:** `/entrar` → Google → callback → boas-vindas (primeira vez) → `/painel`.
 
-- [ ] Migrations com todas as tabelas, enums, triggers e funções da seção 7, aplicadas local e remoto. Bucket `as-documentos` privado criado. Advisors sem alerta crítico em `as_*` (o aviso "RLS enabled no policy" é esperado e está documentado).
-- [ ] `anon` e `authenticated` não conseguem `select` em nenhuma `as_*` nem ler objeto do bucket (pgTAP + teste de Storage).
+- [ ] Migrations com todas as tabelas, enums, triggers e funções da seção 7, aplicadas local e remoto. Bucket R2 `assina-documentos` criado, privado, com CORS só para o site e localhost. Advisors sem alerta crítico em `as_*` (o aviso "RLS enabled no policy" é esperado e está documentado).
+- [ ] `anon` e `authenticated` não conseguem `select` em nenhuma `as_*` (pgTAP). Uma URL do bucket sem assinatura responde 403, e uma pré-assinada vencida também (teste manual registrado no plano).
 - [ ] O consentimento do Google pede só nome, e-mail e foto (sem tela de app não verificado).
 - [ ] O primeiro login cria `as_contas` e uma `as_credenciais` `api` ativa. `valor_cifrado` não contém o prefixo `assina_` em claro.
 - [ ] O segundo login com o mesmo Google não duplica conta nem chave.
@@ -553,7 +553,7 @@ Criar os arquivos do Anexo B, tornar os scripts executáveis e testar cada hook 
 
 **Estados:** carregando o upload, erro de arquivo (cada motivo da regra 11.1 com a frase da seção 15) e rascunho salvo automaticamente (debounce de 800 ms).
 
-- [ ] `POST /api/painel/envelopes` cria o rascunho (`origem = painel`, `codigo_verificacao` gerado) e devolve uma URL assinada de upload válida por 2 h. O navegador faz o `PUT` direto no Storage.
+- [ ] `POST /api/painel/envelopes` cria o rascunho (`origem = painel`, `codigo_verificacao` gerado) e devolve uma URL assinada de upload válida por 2 h. O navegador faz o `PUT` direto no R2.
 - [ ] `POST /api/painel/envelopes/{id}/arquivo` (depois do upload) baixa o PDF no servidor e valida a regra 11.1. Se for válido, grava `paginas`, `dimensoes_paginas`, `tamanho_bytes` e `nome_arquivo`. Se for inválido, apaga o objeto e devolve o código do erro.
 - [ ] PDF de 10,1 MB, PDF com senha, PDF com 101 páginas e arquivo `.docx` renomeado para `.pdf` são recusados com as mensagens da seção 15.
 - [ ] Trocar o arquivo num rascunho com campos apaga os campos e avisa "Os campos posicionados foram removidos."
@@ -587,7 +587,7 @@ Criar os arquivos do Anexo B, tornar os scripts executáveis e testar cada hook 
 
 - [ ] O envio, numa transação:
   1. revalida as regras 11.1–11.3 e os limites 11.12 e 11.20;
-  2. calcula o `hash_original` do objeto no Storage;
+  2. calcula o `hash_original` do objeto no R2;
   3. aplica `rascunho → enviado`;
   4. preenche `enviado_em` e `prazo_em`;
   5. muda para `aguardando` os assinantes da vez (todos, ou só `ordem = 1` com `em_ordem`);
@@ -765,7 +765,7 @@ Criar os arquivos do Anexo B, tornar os scripts executáveis e testar cada hook 
 | Entrar | `/entrar` | público | botão Google, erros de acesso | — | `as_contas` (callback) |
 | Boas-vindas | `/painel/boas-vindas` | remetente | nome, aceite dos Termos e da Privacidade | E | `as_contas` |
 | [Remetente] Envelopes | `/painel` | remetente | lista, filtros, busca | L | `as_envelopes`, `as_signatarios` |
-| [Remetente] Novo envelope | `/painel/envelopes/novo` e `/painel/envelopes/{id}/editar` | remetente | upload, título, mensagem, destinatários, ordem, prazo, lembrete | E | `as_envelopes`, `as_signatarios`, Storage |
+| [Remetente] Novo envelope | `/painel/envelopes/novo` e `/painel/envelopes/{id}/editar` | remetente | upload, título, mensagem, destinatários, ordem, prazo, lembrete | E | `as_envelopes`, `as_signatarios`, R2 |
 | [Remetente] Posicionar campos | `/painel/envelopes/{id}/campos` | remetente | PDF com campos por assinante | E | `as_campos` |
 | [Remetente] Revisar e enviar | `/painel/envelopes/{id}/revisar` | remetente | resumo final, avisos | E (enviar) | `as_envelopes`, `as_signatarios`, `as_eventos`, `as_notificacoes` |
 | [Remetente] Detalhe do envelope | `/painel/envelopes/{id}` | remetente | status, destinatários, trilha, integridade, ações | L/E (lembrar, copiar link, cancelar, excluir, baixar, exportar) | todas as do envelope |
@@ -795,12 +795,12 @@ Criar os arquivos do Anexo B, tornar os scripts executáveis e testar cada hook 
 | **11.10** | **Selo:** PAdES (`ETSI.CAdES.detached`), placeholder de 24 KB, motivo "Selo de integridade Assina", local "Brasil", com o certificado de `SELO_P12_BASE64`/`SELO_P12_SENHA`. Se `SELO_TSA_URL` existe, pede o carimbo do tempo RFC 3161 com timeout de **5 s**: se responder, `selo = 'B-T'`; se não, `'B-B'`, e o envelope conclui do mesmo jeito. Falha da finalização: até **3** tentativas (a do momento + 2 da faxina), depois alerta ao admin e o envelope continua `finalizando` até intervenção manual | servidor (`src/server/pdf/seal.ts`) |
 | **11.11** | **Verificação:** `codigo_verificacao` de 12 caracteres base32 Crockford (sem I, L, O, U), único e gerado na criação. Consulta por hash ou código devolve só: status, título do envelope, enviado em, concluído em, nomes dos assinantes com data e hora da assinatura, tipo do selo e se o hash informado é o original ou o final. **Nunca** e-mail, CPF, IP nem link de download. Envelopes `rascunho` não aparecem | servidor |
 | **11.12** | **Proteções:** `CONTAS_NOVAS_POR_DIA` (padrão 50); **30 envelopes enviados por conta a cada 24 h**, em qualquer nível (anti-abuso; conta contra `enviado_em`, pelas três portas). O total guardado é a regra 11.20; conta suspensa = como inexistente; `EMAILS_BLOQUEADOS`/`EMAILS_PERMITIDOS` como no Reunião | servidor |
-| **11.13** | **Volume-alvo do MVP** (base para o Storage): até 50 contas ativas, 1.000 envelopes por mês, PDF médio de 1 MB (original + final ≈ 2,2 MB), ou seja, cerca de 2,2 GB por mês de crescimento antes do expurgo. Ver o risco 23.1 | — |
+| **11.13** | **Volume-alvo do MVP** (base para o armazenamento): até 50 contas ativas, 1.000 envelopes por mês, PDF médio de 1 MB (original + final ≈ 2,2 MB), ou seja, cerca de 2,2 GB por mês de crescimento antes do expurgo. Ver o risco 23.1 | — |
 | **11.14** | **Retenção:** concluídos ficam enquanto a conta existir. Recusados, cancelados e expirados têm os **arquivos** (original e imagens de assinatura) apagados **90 dias** depois de `encerrado_em`; a linha e a trilha ficam, e `arquivos_expurgados_em` é preenchido. Rascunhos sem atualização há **30 dias** são apagados por inteiro. O signatário baixa o final pelo link até **30 dias** depois de `concluido_em`; depois, "Peça o documento a {remetente}." | faxina |
 | **11.15** | **MCP:** `criar_envelope` só cria `rascunho` (nunca envia no mesmo chamado). `enviar_envelope` é chamada separada, o que dá ao cliente a chance de pedir a confirmação da pessoa. O MCP não posiciona campos (ou vai sem campos ou devolve o link do editor), não exclui envelope e não mexe na chave nem no webhook | servidor MCP |
 | **11.16** | **E-mails:** idempotentes pela `chave` (7.3). Até **5** tentativas: a imediata, mais as da faxina diária. O assunto e o corpo nunca trazem o conteúdo do documento, só o título dado pelo remetente. O código de acesso **não** é retentado pela faxina (expira antes), e a tela mostra "Não consegui enviar o código agora. Tente de novo em instantes." | servidor + faxina |
 | **11.17** | **Webhooks:** eventos `signatario.assinou`, `envelope.concluido`, `envelope.recusado`, `envelope.cancelado`, `envelope.expirado`. `POST` JSON com timeout de 10 s. Sucesso é 2xx. Assinatura `Assina-Assinatura: t={epoch},v1={hex(hmac_sha256(segredo, t + "." + corpo))}`, mais os cabeçalhos `Assina-Entrega: {id}` e `Assina-Evento: {evento}`. Até **6** tentativas: a imediata, mais uma por execução diária da faxina. O corpo traz `{evento, envelope:{id, status, titulo, codigo_verificacao, concluido_em, hash_final}, signatario?:{id, email, assinado_em}, ocorrido_em}`, nunca o PDF | servidor + faxina |
-| **11.18** | **`arquivo_url` (API e MCP):** só `https`. O host resolvido não pode ser privado, loopback, link-local nem metadado de nuvem (confere depois do DNS e em cada redirecionamento, no máximo 3). Timeout de 10 s, corta em 10 MB, `Content-Type` ignorado (vale o `%PDF-`). Grava no Storage e segue a regra 11.1 | servidor (`src/server/files/fetch-remote.ts`) |
+| **11.18** | **`arquivo_url` (API e MCP):** só `https`. O host resolvido não pode ser privado, loopback, link-local nem metadado de nuvem (confere depois do DNS e em cada redirecionamento, no máximo 3). Timeout de 10 s, corta em 10 MB, `Content-Type` ignorado (vale o `%PDF-`). Grava no R2 e segue a regra 11.1 | servidor (`src/server/files/fetch-remote.ts`) |
 | **11.19** | **Fuso:** tudo é gravado em UTC. Tela, e-mail e manifesto mostram `America/Sao_Paulo` com o rótulo "horário de Brasília". A API devolve ISO 8601 UTC | apresentação |
 | **11.20** | **Níveis de conta:** nível 1 = **50**, nível 2 = **500**, nível 3 = **5.000** documentos guardados. "Documento guardado" = envelope da conta com `status <> 'rascunho'` que ainda existe (concluídos, em andamento e encerrados, inclusive os com arquivos já expurgados). Rascunhos não contam. Excluir um envelope libera a vaga. Toda conta nasce com `nivel = 1`. O envio que faria o total passar do limite é recusado com `limite_do_nivel`, conferido na mesma transação do envio (com `pg_advisory_xact_lock` pela conta, para dois envios paralelos não passarem juntos). Rebaixar o nível nunca apaga nada: a conta só deixa de enviar até voltar para baixo do limite. Os limites ficam em `src/lib/limits.ts` (`LIMITE_POR_NIVEL`), num lugar só. Mudar de nível no MVP: `update as_contas set nivel = …` pelo admin (sem tela) | servidor + banco (check) |
 
@@ -1102,7 +1102,7 @@ O remetente técnico é `naoresponda@assina.app.br`, com nome de exibição "{re
 - **Comentários:** toda função, rota, hook, trigger e função SQL tem cabeçalho em português dizendo o que faz, o que recebe, o que devolve e a regra (ex.: `// Implementa a regra 11.4 (bloqueio após 5 tentativas)`). Lógica não óbvia leva comentário inline.
 - **Copy** só em `src/lib/copy.ts` (seção 15). Números só das regras da seção 11, em `src/lib/limits.ts`, com o número da regra em cada constante.
 - **Segredos** só em `src/server/`, `src/app/api/`, `src/app/mcp/`, `src/app/oauth/`, `src/app/sair/` e `scripts/`. Todo arquivo de `src/server/` começa com `import "server-only"`.
-- **Armazenamento atrás de uma interface:** todo acesso a arquivo (gerar URL de upload ou download, ler, gravar, apagar, somar o uso) passa por `src/server/files/storage.ts`, que expõe uma interface `ArquivoStorage` e hoje tem uma implementação só (Supabase Storage, bucket `as-documentos`). Nenhum outro arquivo chama `supabase.storage` direto. Isso permite trocar o backend, ou ter um backend por nível no futuro (seção 28), sem tocar no domínio. Os caminhos gravados no banco (`*_path`) são relativos ao backend.
+- **Armazenamento atrás de uma interface:** todo acesso a arquivo (gerar URL de upload ou download, ler, gravar, apagar, somar o uso) passa por `src/server/files/storage.ts`, que expõe uma interface `ArquivoStorage` e hoje tem uma implementação só (Cloudflare R2, bucket `assina-documentos`). Nenhum outro arquivo chama `supabase.storage` direto. Isso permite trocar o backend, ou ter um backend por nível no futuro (seção 28), sem tocar no domínio. Os caminhos gravados no banco (`*_path`) são relativos ao backend.
 - **Um domínio, três portas:** `src/server/envelopes/` concentra criar, validar, enviar, assinar, recusar, cancelar, lembrar e finalizar. As rotas do painel, `src/app/api/v1/` e `src/app/mcp/` só fazem autenticação, parse (zod) e chamada.
 - **Pastas:**
 
@@ -1139,7 +1139,8 @@ scripts/  tests/  plans/
 | Variável | Pública? | Para quê |
 |---|---|---|
 | `NEXT_PUBLIC_SITE_URL` | sim | origem (OAuth, links, metadados MCP) |
-| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | não | banco e Storage |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | não | banco |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | não | arquivos (R2; token restrito ao bucket) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | não | login |
 | `SESSION_SECRET` | não | JWT das sessões (remetente e signatário) |
 | `CHAVES_ENC_KEY` | não | AES-256-GCM da chave de API e do segredo do webhook (32 bytes base64) |
@@ -1199,8 +1200,8 @@ Toda mudança de schema, trigger, rota ou lógica de tela atualiza este document
 | Dado | Por quê | Onde | Quem acessa | Retenção |
 |---|---|---|---|---|
 | Nome e e-mail do remetente | conta, avisos | `as_contas` | o próprio | até excluir a conta |
-| PDF original e final | o serviço | Storage `as-documentos` (privado) | remetente; signatário pelo token | regra 11.14 |
-| Nome, e-mail e CPF (se exigido) do signatário, IP, user agent, imagem da assinatura | prova de autoria | `as_signatarios`, `as_eventos`, Storage | remetente; o próprio signatário vê os seus | igual ao envelope |
+| PDF original e final | o serviço | Cloudflare R2, bucket `assina-documentos` (privado) | remetente; signatário pelo token | regra 11.14 |
+| Nome, e-mail e CPF (se exigido) do signatário, IP, user agent, imagem da assinatura | prova de autoria | `as_signatarios`, `as_eventos`, R2 | remetente; o próprio signatário vê os seus | igual ao envelope |
 | Valores dos campos | conteúdo do documento | `as_campos` | remetente | igual ao envelope |
 | Chave de API (cifrada), tokens MCP (hash) | integrações | `as_credenciais` | remetente | até revogar ou excluir a conta |
 | Logs | diagnóstico | Vercel | DabLab | padrão da Vercel; **nunca** registrar e-mail, nome, CPF, título, token, código, URL `/assinar/…`, IP de signatário nem corpo de webhook |
@@ -1218,7 +1219,7 @@ Toda mudança de schema, trigger, rota ou lógica de tela atualiza este document
 - **SSRF:** regra 11.18.
 - **Webhook:** o segredo é cifrado; a URL fica restrita a `https` e passa pelo mesmo filtro de IP privado da regra 11.18.
 - **Certificado do selo:** `SELO_P12_BASE64` só nas variáveis da Vercel. Trocar o certificado não invalida PDFs já selados.
-- **Supabase:** advisors (security e performance) depois de cada DDL, filtrando `as_*`; funções com `search_path=''`; nenhuma `SECURITY DEFINER` exposta; bucket privado.
+- **Supabase:** advisors (security e performance) depois de cada DDL, filtrando `as_*`; funções com `search_path=''`; nenhuma `SECURITY DEFINER` exposta. **R2:** bucket privado, token só com leitura e escrita de objetos nesse bucket, CORS restrito ao site.
 - **Dependências:** `npm audit --omit=dev` sem vulnerabilidade alta no `verify` (falha o build).
 
 ---
@@ -1297,7 +1298,7 @@ Nenhuma propriedade carrega título, nome, e-mail, CPF, mensagem, motivo, IP, va
 
 | # | Risco | Impacto | Prob. | Mitigação |
 |---|---|---|---|---|
-| 23.1 | **Storage do projeto compartilhado.** No plano gratuito, a cota é de 1 GB **somada a todos os apps**, e a regra 11.13 prevê cerca de 2 GB por mês no volume-alvo. Pela regra 11.20, uma conta cheia no nível 1 guarda uns 110 MB (50 × 2,2 MB), então **cerca de 9 contas cheias esgotam 1 GB**. Uma de nível 3 cheia passaria de 10 GB | alto | alta se o uso crescer | (a) premissa (b) do épico 8.1 confere o plano e a cota atual; (b) expurgo da regra 11.14; (c) alerta: a faxina calcula o total de `as-documentos` e manda e-mail ao `ADMIN_EMAIL` acima de 70% da cota; (d) plano de saída: como todo arquivo passa por `ArquivoStorage` (seção 18), trocar o backend do Assina inteiro (projeto Supabase próprio ou R2) é uma implementação nova e uma cópia, sem mudar o domínio (perguntas 25.3 e 25.5) |
+| 23.1 | **Armazenamento passa da camada gratuita do R2** (10 GB). Pela regra 11.20, uma conta cheia no nível 1 guarda uns 110 MB (50 × 2,2 MB), então seriam umas 90 contas cheias, ou uma conta cheia de nível 3 | baixo (acima disso o R2 cobra cerca de US$ 0,015 por GB por mês, sem custo de saída) | baixa | (a) expurgo da regra 11.14; (b) a faxina soma o uso pelo `ArquivoStorage` e manda e-mail ao `ADMIN_EMAIL` acima de 8 GB; (c) o nível 3 só é concedido à mão (11.20) |
 | 23.2 | **Resend gratuito: 100 e-mails por dia.** Um envelope com 3 assinantes gasta cerca de 10 e-mails (convites, códigos, conclusão) | alto | alta | Pergunta 25.4 (plano pago antes do lançamento público); notificações `falhou` retentadas; código com mensagem clara; o limite da regra 11.12 protege a cota |
 | 23.3 | Certificado autoassinado aparece como "identidade desconhecida" no leitor de PDF e assusta quem recebe | médio | alta | Copy da verificação explica; e-CNPJ A1 da DabLab (pergunta 25.2) |
 | 23.4 | Signatário não recebe o convite ou o código (spam, domínio novo) | alto | média | SPF/DKIM/DMARC no DNS (README); "Copiar link de assinatura" no detalhe; o código vem com assunto curto e sem link |
@@ -1347,7 +1348,7 @@ O agente de código **para e pergunta** ao cruzar com qualquer item abaixo.
 |---|---|---|---|
 | 25.1 | ~~Domínio~~ **Respondida (17/11/2026):** nome **Assina**, domínio **`assina.app.br`** (comprado pelo Alexandre; "Firma" foi descartado porque `firma.app.br` tinha dono). Produção: `NEXT_PUBLIC_SITE_URL=https://assina.app.br`, `www` → 308 para o domínio principal, remetente `naoresponda@assina.app.br` (domínio verificado no Resend), redirect do OAuth `https://assina.app.br/api/auth/google/callback`, MCP em `https://assina.app.br/mcp`. Dev: `localhost:3030`, remetente de teste `onboarding@resend.dev` | — | — |
 | 25.2 | **Certificado do selo:** começar com certificado autoassinado (grátis; o leitor mostra "identidade desconhecida") ou comprar um e-CNPJ A1 da DabLab (cerca de R$ 150–300 por ano, a conferir) antes do lançamento público? | Alexandre | antes do lançamento público (o MVP funciona com o autoassinado) |
-| 25.3 | **Storage:** qual é o plano atual do projeto compartilhado e a cota livre? Aceita migrar o Assina para um projeto próprio (ou subir de plano) quando passar de 70% (risco 23.1)? | Alexandre | épico 8.1 |
+| 25.3 | ~~Storage~~ **Respondida (17/11/2026):** arquivos no **Cloudflare R2**, fora do Supabase, para não aumentar o custo do Supabase. O banco continua no projeto compartilhado | — | — |
 | 25.4 | **Custos de lançamento público:** Resend pago (cerca de US$ 20/mês, 50 mil e-mails) e Vercel Pro (cron mais frequente e uso comercial) entram antes de abrir para todo mundo, ou o lançamento começa limitado por `EMAILS_PERMITIDOS`? | Alexandre | antes do 8.12 |
 | 25.5 | **Níveis 2 e 3:** como uma conta chega lá (pedido manual, pagamento, convite)? E esses níveis terão armazenamento separado (seção 28)? No MVP só existe a coluna, o limite e a mudança manual por SQL | Alexandre | antes de oferecer os níveis 2 e 3 a alguém |
 
@@ -1358,7 +1359,7 @@ O agente de código **para e pergunta** ao cruzar com qualquer item abaixo.
 - [ ] Todos os critérios de 8.0–8.13 cumpridos, com a saída do `npm run verify` colada em cada épico e o relatório do `verifier` sem "não cumprido".
 - [ ] Banco em português, `snake_case`, prefixo `as_`, sem tabela ou coluna fora da seção 7.
 - [ ] Todas as rotinas, rotas, triggers e funções comentadas com a regra que implementam.
-- [ ] RLS ligado e sem acesso de `anon`/`authenticated` em todas as `as_*`; bucket privado (pgTAP e teste).
+- [ ] RLS ligado e sem acesso de `anon`/`authenticated` em todas as `as_*`; bucket R2 privado (pgTAP e teste).
 - [ ] Advisors security e performance rodados depois do último DDL, sem alerta crítico em `as_*`.
 - [ ] Guardrails do Anexo B instalados em `.claude/` e cada hook testado uma vez.
 - [ ] `plans/` com o plano aprovado de cada épico, consistente com o código (ou divergência registrada).
@@ -1379,6 +1380,7 @@ O agente de código **para e pergunta** ao cruzar com qualquer item abaixo.
 3. Colar o prompt de implementação no Claude Code, a partir de `~/assina`.
 4. Desenhar as telas no Claude Design com `prompt-design-assina.md`, em paralelo com os épicos 8.0–8.1.
 5. Durante o 8.1, o Alexandre cria o cliente OAuth no projeto Google Cloud da DabLab (só escopos básicos) seguindo o README.
+   No mesmo épico: criar o bucket R2 `assina-documentos` na conta Cloudflare da DabLab (privado, CORS para o site e localhost), um token de API restrito a esse bucket (leitura e escrita de objetos) e copiar as quatro variáveis `R2_*` para a Vercel e o `.env.local`, seguindo o README.
 6. Durante o 8.6, rodar `npm run selo:gerar` para dev e decidir o 25.2 para produção.
 7. Antes do 8.4: DNS de `assina.app.br` apontado para a Vercel e verificado no Resend.
 8. Durante o 8.11: criar o projeto "Assina" no Visão do Produto e copiar a chave de ingestão para a Vercel.
@@ -1388,7 +1390,7 @@ O agente de código **para e pergunta** ao cruzar com qualquer item abaixo.
 
 ## 28. Roadmap: próximas releases
 
-- **Níveis 2 e 3 e armazenamento por nível** (25.5): tela de nível e uso, caminho para subir de nível e, se fizer sentido, um backend de armazenamento por nível, com a coluna `as_contas.armazenamento` (`supabase_compartilhado`, `r2`, `bucket_proprio`) escolhendo a implementação de `ArquivoStorage`. Opções avaliadas em 17/11/2026: projeto Supabase próprio do Assina (Pro, 100 GB incluídos), Cloudflare R2 (sem custo de saída, compatível com S3) e bucket S3 do próprio cliente no nível 3. A migração de uma conta entre backends copia os objetos, confere o SHA-256 de cada um contra `hash_original`/`hash_final` e só então troca a coluna.
+- **Níveis 2 e 3 e armazenamento por nível** (25.5): tela de nível e uso, caminho para subir de nível e, se fizer sentido, um backend de armazenamento por nível, com a coluna `as_contas.armazenamento` (`r2` padrão, `bucket_proprio`) escolhendo a implementação de `ArquivoStorage`. O R2 já é o backend de todos desde o MVP (decisão de 17/11/2026). A separação que sobra é o **bucket S3 do próprio cliente** no nível 3, se algum pedir. A migração de uma conta entre backends copia os objetos, confere o SHA-256 de cada um contra `hash_original`/`hash_final` e só então troca a coluna.
 - **Modelos:** "Salvar como modelo" num envelope (arquivo + campos), com destinatários trocados por **papéis** ("Contratante", "Contratada"). Tabelas `as_modelos`, `as_modelos_papeis` e `as_modelos_campos`. "Novo envelope a partir de modelo" só pede nome e e-mail por papel. Na API, `POST /api/v1/modelos/{id}/envelopes`; no MCP, `listar_modelos` e `criar_envelope_de_modelo`. É o que torna o MCP útil sem posicionar campos.
 - **Vários PDFs por envelope**, com manifesto único e hash por documento.
 - **Código por SMS ou WhatsApp** (custo por mensagem; precisa de modelo de cobrança ou cota).
@@ -1433,6 +1435,7 @@ Rode npm run verify, cole a saída, acione o verifier e atualize DOCUMENTACAO-TE
 - Reunião, `spec.md` v0.5 (arquitetura, seção 6, seção 16, Anexo B) e print do painel (17/11/2026).
 - registro.br, whois dos domínios candidatos (17/11/2026): `firma.app.br` com dono; `assina.app.br` escolhido.
 - Supabase, projeto `jeesdmfcrmhyufwzwzwt`: prefixos de tabela e extensões instaladas (17/11/2026).
+- Cloudflare R2, preços e camada gratuita: https://developers.cloudflare.com/r2/pricing/ (valores a reconferir no 8.1, premissa (b)).
 
 ---
 
@@ -1483,7 +1486,7 @@ case "$path" in
   *) exit 0 ;;
 esac
 
-if echo "$content" | grep -qE 'SUPABASE_SERVICE_ROLE_KEY|service_role|GOOGLE_CLIENT_SECRET|SESSION_SECRET|CHAVES_ENC_KEY|RESEND_API_KEY|CRON_SECRET|SELO_P12|VISAO_API_KEY|NEXT_PUBLIC_[A-Z_]*(SECRET|KEY|P12)'; then
+if echo "$content" | grep -qE 'SUPABASE_SERVICE_ROLE_KEY|service_role|GOOGLE_CLIENT_SECRET|SESSION_SECRET|CHAVES_ENC_KEY|RESEND_API_KEY|CRON_SECRET|SELO_P12|VISAO_API_KEY|R2_SECRET_ACCESS_KEY|R2_ACCESS_KEY_ID|NEXT_PUBLIC_[A-Z_]*(SECRET|KEY|P12)'; then
   echo "Bloqueado: segredo em código que pode rodar no cliente (seções 18 e 20.3). Leia o segredo só em src/server/ ou numa rota de src/app/api/ e chame essa rota do cliente." >&2
   exit 2
 fi
