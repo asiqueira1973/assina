@@ -120,6 +120,26 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"as_envios": {
+                  Row: {
+                    "conta_id": string,"enviado_em": string,"id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "conta_id": string,"enviado_em"?: string,"id"?: string
+                  }
+                  Update: {
+                    "conta_id"?: string,"enviado_em"?: string,"id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "as_envios_conta_id_fkey"
+      columns: ["conta_id"]
+isOneToOne: false
+      referencedRelation: "as_contas"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"as_eventos": {
                   Row: {
                     "ator": Database["public"]['Enums']["as_ator"],"dados": NonNullable<Json>,"envelope_id": string,"hash": string,"hash_anterior": string,"id": string,"ip": unknown,"ocorrido_em": string,"seq": number,"signatario_id": string | null,"tipo": Database["public"]['Enums']["as_tipo_evento"],"user_agent": string | null
@@ -148,14 +168,14 @@ isOneToOne: false
                   ]
                 },"as_notificacoes": {
                   Row: {
-                    "chave": string,"conta_id": string,"criado_em": string,"envelope_id": string | null,"enviada_em": string | null,"erro": string | null,"id": string,"resend_id": string | null,"signatario_id": string | null,"status": Database["public"]['Enums']["as_status_notificacao"],"tentativas": number,"tipo": Database["public"]['Enums']["as_tipo_notificacao"]
+                    "chave": string,"conta_id": string,"criado_em": string,"envelope_id": string | null,"enviada_em": string | null,"erro": string | null,"id": string,"resend_id": string | null,"reservada_em": string | null,"signatario_id": string | null,"status": Database["public"]['Enums']["as_status_notificacao"],"tentativas": number,"tipo": Database["public"]['Enums']["as_tipo_notificacao"]
                   }
                   ComputedFields: never
                   Insert: {
-                    "chave": string,"conta_id": string,"criado_em"?: string,"envelope_id"?: string | null,"enviada_em"?: string | null,"erro"?: string | null,"id"?: string,"resend_id"?: string | null,"signatario_id"?: string | null,"status"?: Database["public"]['Enums']["as_status_notificacao"],"tentativas"?: number,"tipo": Database["public"]['Enums']["as_tipo_notificacao"]
+                    "chave": string,"conta_id": string,"criado_em"?: string,"envelope_id"?: string | null,"enviada_em"?: string | null,"erro"?: string | null,"id"?: string,"resend_id"?: string | null,"reservada_em"?: string | null,"signatario_id"?: string | null,"status"?: Database["public"]['Enums']["as_status_notificacao"],"tentativas"?: number,"tipo": Database["public"]['Enums']["as_tipo_notificacao"]
                   }
                   Update: {
-                    "chave"?: string,"conta_id"?: string,"criado_em"?: string,"envelope_id"?: string | null,"enviada_em"?: string | null,"erro"?: string | null,"id"?: string,"resend_id"?: string | null,"signatario_id"?: string | null,"status"?: Database["public"]['Enums']["as_status_notificacao"],"tentativas"?: number,"tipo"?: Database["public"]['Enums']["as_tipo_notificacao"]
+                    "chave"?: string,"conta_id"?: string,"criado_em"?: string,"envelope_id"?: string | null,"enviada_em"?: string | null,"erro"?: string | null,"id"?: string,"resend_id"?: string | null,"reservada_em"?: string | null,"signatario_id"?: string | null,"status"?: Database["public"]['Enums']["as_status_notificacao"],"tentativas"?: number,"tipo"?: Database["public"]['Enums']["as_tipo_notificacao"]
                   }
                   Relationships: [
                     {
@@ -298,6 +318,46 @@ isOneToOne: false
               "conta_id": string,"nova": boolean,"suspensa": boolean
             }[]
                            },
+"as_fn_envia_envelope":
+{ Args: { "p_ator": Database["public"]['Enums']["as_ator"],"p_caminho": string,"p_conta_id": string,"p_envelope_id": string,"p_hash": string,"p_ip"?: unknown,"p_limite_diario": number,"p_limites_nivel": (number)[],"p_tokens": Json,"p_user_agent"?: string }; Returns: {
+              "assinado_em": string | null,
+"assinatura_imagem_path": string | null,
+"assinatura_texto": string | null,
+"codigo_expira_em": string | null,
+"codigo_hash": string | null,
+"codigo_tentativas": number,
+"codigos_enviados_hora": number,
+"consentimento_versao": string | null,
+"conta_id": string,
+"cpf": string | null,
+"criado_em": string,
+"email": string,
+"envelope_id": string,
+"exigir_cpf": boolean,
+"id": string,
+"ip_assinatura": unknown,
+"janela_codigos_desde": string | null,
+"lembretes_enviados": number,
+"metodo_assinatura": Database["public"]['Enums']["as_metodo_assinatura"] | null,
+"motivo_recusa": string | null,
+"nome": string,
+"notificado_em": string | null,
+"ordem": number,
+"papel": Database["public"]['Enums']["as_papel"],
+"recusado_em": string | null,
+"rubrica_imagem_path": string | null,
+"rubrica_texto": string | null,
+"status": Database["public"]['Enums']["as_status_signatario"],
+"token_hash": string,
+"ultimo_lembrete_em": string | null,
+"user_agent_assinatura": string | null
+            }[]
+                          SetofOptions: {
+        from: "*"
+        to: "as_signatarios"
+        isOneToOne: false
+        isSetofReturn: true
+      } },
 "as_fn_evento_canonico":
 { Args: { "p_ator": Database["public"]['Enums']["as_ator"],"p_dados": Json,"p_envelope_id": string,"p_ip": unknown,"p_ocorrido_em": string,"p_seq": number,"p_signatario_id": string,"p_tipo": Database["public"]['Enums']["as_tipo_evento"],"p_user_agent": string }; Returns: string
                            },
@@ -322,6 +382,9 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"as_fn_reserva_notificacao":
+{ Args: { "p_id": string,"p_max_tentativas": number }; Returns: boolean
+                           },
 "as_fn_substitui_campos":
 { Args: { "p_conta_id": string,"p_envelope_id": string,"p_lista": Json }; Returns: {
               "altura": number,

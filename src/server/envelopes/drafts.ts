@@ -41,6 +41,12 @@ export class DraftError extends Error {
       | "copias_demais"
       | "campos_demais"
       | "campo_invalido"
+      | "status_mudou"
+      | "envelope_mudou"
+      | "sem_assinante"
+      | "limite_diario"
+      | "limite_do_nivel"
+      | "convite_indisponivel"
       | PdfErrorCode,
   ) {
     super(code);

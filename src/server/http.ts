@@ -29,7 +29,11 @@ export function invalidData(): Response {
 export function errorResponse(e: unknown): Response {
   if (e instanceof DraftError) {
     if (e.code === "nao_encontrado") return Response.json({ codigo: "nao_encontrado" }, { status: 404 });
-    if (e.code === "envelope_congelado") return Response.json({ codigo: "envelope_congelado" }, { status: 409 });
+    if (e.code === "envelope_congelado" || e.code === "status_mudou" || e.code === "envelope_mudou" || e.code === "convite_indisponivel") {
+      return Response.json({ codigo: e.code }, { status: 409 });
+    }
+    // Seção 13.2: limites respondem 429.
+    if (e.code === "limite_diario" || e.code === "limite_do_nivel") return Response.json({ codigo: e.code }, { status: 429 });
     if (PDF_CODES.has(e.code)) return Response.json({ codigo: "arquivo_invalido", motivo: e.code }, { status: 400 });
     return Response.json({ codigo: e.code }, { status: 400 });
   }

@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Versão | 0.6 (17/11/2026: épico 8.3 — `as_fn_substitui_campos`, textos do editor) · 0.5 (17/11/2026: épico 8.2 — textos do rascunho na seção 15; `as_fn_cria_rascunho`, `as_fn_substitui_signatarios`, ordem diferida e rota `/upload`) · 0.4 (17/11/2026: épico 8.1 — canônico da trilha em linhas (11.6), `as_fn_entra_conta` e congelamento refinado (7.5)) · 0.3 (17/11/2026: arquivos no Cloudflare R2, fora do Supabase; 25.3 respondida) · 0.2 (17/11/2026: níveis 1, 2 e 3 com limite de documentos, regra 11.20; armazenamento atrás de uma interface única, seção 18) · 0.1 (17/11/2026: nome Assina, domínio assina.app.br; nome de trabalho anterior "Firma" descartado porque firma.app.br já tinha dono) |
+| Versão | 0.7 (17/11/2026: épico 8.4 — `as_fn_envia_envelope`, textos do revisar e do uso do nível) · 0.6 (17/11/2026: épico 8.3 — `as_fn_substitui_campos`, textos do editor) · 0.5 (17/11/2026: épico 8.2 — textos do rascunho na seção 15; `as_fn_cria_rascunho`, `as_fn_substitui_signatarios`, ordem diferida e rota `/upload`) · 0.4 (17/11/2026: épico 8.1 — canônico da trilha em linhas (11.6), `as_fn_entra_conta` e congelamento refinado (7.5)) · 0.3 (17/11/2026: arquivos no Cloudflare R2, fora do Supabase; 25.3 respondida) · 0.2 (17/11/2026: níveis 1, 2 e 3 com limite de documentos, regra 11.20; armazenamento atrás de uma interface única, seção 18) · 0.1 (17/11/2026: nome Assina, domínio assina.app.br; nome de trabalho anterior "Firma" descartado porque firma.app.br já tinha dono) |
 | Responsável de produto | Alexandre Siqueira (DabLab) |
 | Status | pronto para revisão |
 | Data | 17/11/2026 |
@@ -454,6 +454,15 @@ as_contas 1 ──── N as_credenciais N ──── 0..1 as_oauth_clientes 
 | `erro` | text | sim | — | sem dado pessoal |
 | `criado_em` | timestamptz | não | `now()` | |
 | `enviada_em` | timestamptz | sim | — | |
+| `reservada_em` | timestamptz | sim | — | v0.7: reserva de envio por 2 min (`as_fn_reserva_notificacao`); nulo fora de um envio em andamento |
+
+**`as_envios`** (v0.7): um registro por envio, para o limite de 30 em 24 h (regra 11.12). Fica fora do envelope: excluir o envelope não apaga o registro; só cai com a conta.
+
+| Coluna | Tipo | Nulo | Default | Notas |
+|---|---|---|---|---|
+| `id` | uuid | não | `gen_random_uuid()` | PK |
+| `conta_id` | uuid | não | — | FK → `as_contas.id` on delete cascade |
+| `enviado_em` | timestamptz | não | `now()` | índice (`conta_id`, `enviado_em desc`) |
 
 **`as_entregas_webhook`**
 
@@ -502,6 +511,8 @@ as_contas 1 ──── N as_credenciais N ──── 0..1 as_oauth_clientes 
 | `as_fn_substitui_signatarios(envelope_id, conta_id, lista)` | função | `as_signatarios`, `as_campos` | troca a lista de destinatários de um rascunho (regra 11.2): só da conta (`nao_encontrado`) e só em rascunho (`envelope_congelado`); recusa e-mail repetido (`email_repetido`), mais de 10 assinantes (`assinantes_demais`) ou 5 cópias (`copias_demais`); mantém o id (e os campos) de quem continua pelo e-mail, apaga quem saiu, renumera a ordem pela posição e tira os campos de quem virou cópia |
 | `as_fn_anexa_arquivo(envelope_id, conta_id, caminho, nome, tamanho, paginas, dimensoes)` | função | `as_envelopes`, `as_campos` | troca atômica do arquivo do rascunho (épico 8.2, princípio 2): com o envelope travado, confere conta e rascunho, apaga os campos e aponta para o arquivo novo, que o servidor já validou e gravou num caminho por versão; devolve o caminho anterior (que o servidor apaga) e se havia campos |
 | `as_fn_substitui_campos(envelope_id, conta_id, lista)` | função | `as_campos` | troca todos os campos do rascunho numa transação (épico 8.3): envelope travado, da conta (`nao_encontrado`) e em rascunho (`envelope_congelado`); até 50 por assinante (`campos_demais`); assinatura, rubrica, data e nome sempre obrigatórios; página e assinante conferidos pelo trigger (`campo_invalido`) |
+| `as_fn_envia_envelope(envelope_id, conta_id, caminho, hash, tokens, limite_diario, limites_nivel, ator, ip, user_agent)` | função | `as_envelopes`, `as_signatarios`, `as_eventos`, `as_notificacoes` | envio numa transação (épico 8.4): trava a conta (advisory lock) e o envelope; confere rascunho (`status_mudou`), arquivo igual ao lido pelo servidor e assinantes iguais aos tokens (`envelope_mudou`), assinante (`sem_assinante`), limites 11.12 (`limite_diario`, contado em `as_envios`) e 11.20 (`limite_do_nivel`, números vindos do servidor); aplica `rascunho → enviado` por `as_fn_transicao_envelope` com hash e prazo, grava os `token_hash`, põe os da vez em `aguardando`, registra `criado` (se faltar) e `enviado`, enfileira os convites; devolve os destinatários da vez |
+| `as_fn_reserva_notificacao(id, max_tentativas)` | função | `as_notificacoes` | reserva um e-mail para envio por 2 minutos, se não foi enviado, há tentativa sobrando e ninguém o reservou; conta a tentativa (regra 11.16). Impede dois envios do mesmo convite ao mesmo tempo; reserva vencida libera sozinha |
 
 Os erros de negócio sobem com `MESSAGE` igual ao código, e o servidor traduz para a copy da seção 15.
 
@@ -802,7 +813,7 @@ Criar os arquivos do Anexo B, tornar os scripts executáveis e testar cada hook 
 | **11.9** | **Manifesto de assinaturas** (páginas A4 anexadas ao fim do PDF): título "Manifesto de assinaturas"; título do envelope; nome e e-mail do remetente; código de verificação + QR para `{SITE}/verificar/{codigo}`; SHA-256 do original; enviado em e concluído em (Brasília, com "UTC−3"); por assinante: nome, e-mail mascarado (`a***@dominio.com`), CPF mascarado (`***.456.789-**`) se coletado, assinatura (imagem ou nome em cursiva), "Autenticado por código enviado ao e-mail", IP, data e hora da assinatura; cópias: nome e e-mail mascarado; depois a **trilha completa** em tabela (data e hora, evento em português, quem, IP); rodapé com o texto legal da seção 15 e "Página X de Y do manifesto". O hash final não aparece no próprio arquivo (ele é calculado depois). Fica na página de verificação e no e-mail de conclusão | servidor (`src/server/pdf/manifest.ts`) |
 | **11.10** | **Selo:** PAdES (`ETSI.CAdES.detached`), placeholder de 24 KB, motivo "Selo de integridade Assina", local "Brasil", com o certificado de `SELO_P12_BASE64`/`SELO_P12_SENHA`. Se `SELO_TSA_URL` existe, pede o carimbo do tempo RFC 3161 com timeout de **5 s**: se responder, `selo = 'B-T'`; se não, `'B-B'`, e o envelope conclui do mesmo jeito. Falha da finalização: até **3** tentativas (a do momento + 2 da faxina), depois alerta ao admin e o envelope continua `finalizando` até intervenção manual | servidor (`src/server/pdf/seal.ts`) |
 | **11.11** | **Verificação:** `codigo_verificacao` de 12 caracteres base32 Crockford (sem I, L, O, U), único e gerado na criação. Consulta por hash ou código devolve só: status, título do envelope, enviado em, concluído em, nomes dos assinantes com data e hora da assinatura, tipo do selo e se o hash informado é o original ou o final. **Nunca** e-mail, CPF, IP nem link de download. Envelopes `rascunho` não aparecem | servidor |
-| **11.12** | **Proteções:** `CONTAS_NOVAS_POR_DIA` (padrão 50); **30 envelopes enviados por conta a cada 24 h**, em qualquer nível (anti-abuso; conta contra `enviado_em`, pelas três portas). O total guardado é a regra 11.20; conta suspensa = como inexistente; `EMAILS_BLOQUEADOS`/`EMAILS_PERMITIDOS` como no Reunião | servidor |
+| **11.12** | **Proteções:** `CONTAS_NOVAS_POR_DIA` (padrão 50); **30 envelopes enviados por conta a cada 24 h**, em qualquer nível (anti-abuso, pelas três portas; contados em `as_envios`, que sobrevive à exclusão do envelope: cancelar e excluir não devolve a vaga do dia). O total guardado é a regra 11.20; conta suspensa = como inexistente; `EMAILS_BLOQUEADOS`/`EMAILS_PERMITIDOS` como no Reunião | servidor |
 | **11.13** | **Volume-alvo do MVP** (base para o armazenamento): até 50 contas ativas, 1.000 envelopes por mês, PDF médio de 1 MB (original + final ≈ 2,2 MB), ou seja, cerca de 2,2 GB por mês de crescimento antes do expurgo. Ver o risco 23.1 | — |
 | **11.14** | **Retenção:** concluídos ficam enquanto a conta existir. Recusados, cancelados e expirados têm os **arquivos** (original e imagens de assinatura) apagados **90 dias** depois de `encerrado_em`; a linha e a trilha ficam, e `arquivos_expurgados_em` é preenchido. Rascunhos sem atualização há **30 dias** são apagados por inteiro. O signatário baixa o final pelo link até **30 dias** depois de `concluido_em`; depois, "Peça o documento a {remetente}." | faxina |
 | **11.15** | **MCP:** `criar_envelope` só cria `rascunho` (nunca envia no mesmo chamado). `enviar_envelope` é chamada separada, o que dá ao cliente a chance de pedir a confirmação da pessoa. O MCP não posiciona campos (ou vai sem campos ou devolve o link do editor), não exclui envelope e não mexe na chave nem no webhook | servidor MCP |
@@ -875,6 +886,7 @@ Ficam em `src/app/api/painel/*` e `src/app/api/assinar/[token]/*`, todas com `re
 | PUT | `/api/painel/envelopes/{id}/signatarios` | substitui a lista (rascunho) |
 | PUT | `/api/painel/envelopes/{id}/campos` | substitui os campos (rascunho) |
 | POST | `/api/painel/envelopes/{id}/enviar` · `/cancelar` · `/signatarios/{sid}/lembrar` · `/signatarios/{sid}/link` | ações |
+| POST | `/api/painel/envelopes/{id}/signatarios/{sid}/convite` | "Tentar de novo" do convite que falhou (v0.7, épico 8.4): reenvia com link novo; o anterior deixa de valer |
 | GET | `/api/painel/envelopes/{id}/arquivo?versao=original\|final` | 302 para URL assinada de 5 min, e registra `baixou_*` |
 | GET | `/api/painel/envelopes/{id}/trilha.csv` | seção 14 |
 | DELETE | `/api/painel/envelopes/{id}` | 7.4 |
@@ -988,6 +1000,9 @@ O tom é direto, cordial, sem exclamação e sem jargão jurídico além do nece
 | Editor, documento (v0.6) | "Voltar" · "Carregando o documento…" / "Não consegui abrir o documento. Tente de novo." · "Arraste um campo para a página ou toque nele para pôr na página à vista." · "Página {n} de {total}" · "Tentar de novo" · "Setas movem o campo, Shift e setas mudam o tamanho, Delete apaga." (instrução para leitor de tela) |
 | Editor no celular | "Use um computador para posicionar campos." |
 | Revisar | "Revise antes de enviar" · "{nome} não tem campo de assinatura. Ele vai assinar só no manifesto." · "Depois de enviado, o documento não pode ser alterado." · "Enviar para assinatura" |
+| Revisar, resumo (v0.7) | "Mensagem" · "Sem mensagem" · "1 campo" / "{n} campos" / "Sem campos (assina no manifesto)" · "Editar" |
+| Uso do nível (v0.7, regra 11.20) | "{n} de {limite} documentos · Nível {n}" |
+| Detalhe (v0.7) | "Código de verificação" |
 | Enviado | "Enviado." |
 | Faixa de e-mail que falhou | "Não consegui enviar o convite para {email}." / "Tentar de novo" |
 | Detalhe, ações | "Lembrar" · "Copiar link de assinatura" → "Link copiado. O link anterior deixa de funcionar." · "Baixar original" · "Baixar assinado" · "Exportar trilha" · "Cancelar envelope" · "Excluir" |

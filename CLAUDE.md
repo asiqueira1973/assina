@@ -9,7 +9,7 @@ Se um teste falhar, corrija o código, não o teste; nunca pule nem apague teste
 Bug: teste que reproduz → ver falhar → commit → `touch .claude/fix-mode` → corrigir → `rm .claude/fix-mode`.
 
 ## Estado
-Épicos 8.0 a 8.3 (rascunho, upload, validação do PDF e editor de campos) concluídos. Migrations aplicadas só no **local**; pendências do Alexandre em `PENDENCIAS.md`. Próximo: 8.4 (revisar e enviar).
+Épicos 8.0 a 8.4 (rascunho, upload, editor de campos, revisar e enviar) concluídos. Migrations aplicadas só no **local**; pendências do Alexandre em `PENDENCIAS.md`. Próximo: 8.5 (assinatura pelo signatário). E-mail em dev vai para `.caixa-de-saida-local/`.
 
 ## Convenções (seção 18)
 - Banco em português `snake_case`, **sempre com prefixo `as_`** (projeto Supabase compartilhado `jeesdmfcrmhyufwzwzwt`). Código, variáveis e arquivos em inglês; fronteira em `src/server/db/`.
@@ -27,6 +27,7 @@ Bug: teste que reproduz → ver falhar → commit → `touch .claude/fix-mode` �
 - Service role ignora RLS: toda consulta filtra por `conta_id` ou `token_hash`.
 - Trilha (`as_eventos`) só por `rpc('as_fn_registra_evento')`. O hook bloqueia escrita direta.
 - Texto que explica o que o Assina **não** é ("ICP-Brasil", "certificado digital") fica no bloco `LEGAL_NEGATIVAS` do `copy.ts`. Um Edit que mexa só no meio desse bloco é barrado pelo `guard-copy` porque o trecho não traz a linha `LEGAL_NEGATIVAS`: nesse caso, edite o bloco inteiro.
+- O `guard-copy` lê o arquivo inteiro, comentários inclusive: em `src/app`, `src/features`, `copy.ts`, e-mail e manifesto, nem comentário pode dizer "assinatura digital", "certificado digital" etc. Escreva "assinado eletronicamente".
 - Regex com acento em hook: o grep do macOS compara byte a byte dentro de `[...]`. Use alternância `(a|á)`, nunca `[aá]`.
 - Hook novo ou alterado → acrescente casos em `scripts/test-guardrails.sh` e atualize o Anexo B do spec no mesmo commit.
 - Nunca logar e-mail, nome, CPF, título, token, código ou URL `/assinar/…`.
@@ -36,5 +37,6 @@ Bug: teste que reproduz → ver falhar → commit → `touch .claude/fix-mode` �
 - Testes de rota usam o banco local real: cada teste cria a própria conta e apaga no `afterAll`; nunca apague "tudo". No pgTAP também: toda consulta filtra pelo id ou código da fixture (o banco local tem dados de teste manual; um `where email = …` solto pega linha de outro envelope e quebra o plano).
 - O Next 16 mantém a página anterior escondida no DOM: em teste no navegador, `querySelector` pode achar a cópia invisível (largura 0). Filtre pelo elemento visível.
 - O worker do pdf.js vai para `public/` pelo `predev`/`prebuild` (não versionado, fora do ESLint). Rodar `next dev` direto, sem `npm run`, deixa o editor sem worker.
+- Código de verificação em teste: 12 caracteres de `0-9A-HJKMNP-TV-Z` (base32 Crockford, sem I, L, O, U). Inventar "LIVR…" ou "OUTR…" quebra o check do banco e o teste falha longe do motivo (errado três vezes): no Vitest use `generateVerificationCode()`; no pgTAP confira cada letra.
 - `next typegen` gera `PageProps`/`LayoutProps`: rode `npm run typecheck`, não `tsc` direto.
 - Quando o agente errar a mesma coisa duas vezes, a correção entra aqui.

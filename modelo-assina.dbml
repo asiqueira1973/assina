@@ -283,6 +283,14 @@ Table as_notificacoes {
   erro text [note: 'sem dado pessoal']
   criado_em timestamptz [not null, default: `now()`]
   enviada_em timestamptz
+  reservada_em timestamptz [note: 'reserva de envio por 2 min (as_fn_reserva_notificacao)']
+}
+
+// Um registro por envio (limite de 30 em 24 h, regra 11.12); não cai com o envelope, só com a conta.
+Table as_envios {
+  id uuid [pk, default: `gen_random_uuid()`]
+  conta_id uuid [not null]
+  enviado_em timestamptz [not null, default: `now()`]
 }
 
 Table as_entregas_webhook {
@@ -313,5 +321,6 @@ Ref: as_eventos.signatario_id > as_signatarios.id [delete: cascade]
 Ref: as_notificacoes.conta_id > as_contas.id [delete: cascade]
 Ref: as_notificacoes.envelope_id > as_envelopes.id [delete: cascade]
 Ref: as_notificacoes.signatario_id > as_signatarios.id [delete: cascade]
+Ref: as_envios.conta_id > as_contas.id [delete: cascade]
 Ref: as_entregas_webhook.conta_id > as_contas.id [delete: cascade]
 Ref: as_entregas_webhook.envelope_id > as_envelopes.id [delete: cascade]

@@ -13,3 +13,6 @@
   font-weight: 600;
   cursor: pointer;
 }
+
+/* Uso do nível dentro do cartão: anula a margem negativa da linha da lista. */
+.usage > p { margin: 10px 0 0; }

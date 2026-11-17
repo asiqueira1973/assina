@@ -12,3 +12,4 @@ supabase/.temp/
 .DS_Store
 .armazenamento-local/
 public/pdf.worker.min.mjs
+.caixa-de-saida-local/

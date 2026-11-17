@@ -4,7 +4,7 @@ Descreve o sistema **como está implementado**, não como foi planejado (spec.md
 
 | | |
 |---|---|
-| Estado | Épicos 8.0 a 8.3 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
+| Estado | Épicos 8.0 a 8.4 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
 | Stack | Next.js 16.4.6 (App Router, Cache Components, `proxy.ts`), React 19.3, TypeScript, Supabase Postgres (projeto compartilhado, prefixo `as_`), Vitest, pgTAP |
 
 ---
@@ -23,7 +23,8 @@ Banco em português, prefixo `as_`. Toda tabela com RLS ligado e **nenhuma polí
 | `as_signatarios` | Quem assina (`assinar`) ou só recebe cópia (`copia`) | `token_hash`: SHA-256 do token do link (o link em si não fica no banco). `ordem`: 1–10, única entre os assinantes do envelope (exclusion constraint diferida, para reordenar numa transação); nas cópias é sempre 1 e não significa nada. `codigo_*`: o código de 6 dígitos atual e seus contadores. `ip_assinatura`/`user_agent_assinatura`: evidência do momento da assinatura |
 | `as_campos` | Campos posicionados no PDF | `x`, `y`, `largura`, `altura` em fração da página (0–1, origem no canto superior esquerdo); o campo nunca passa da borda (check). `valor`: preenchido na assinatura |
 | `as_eventos` | Trilha de auditoria | Só inserção. `seq` 1, 2, 3… por envelope. `hash` encadeado no `hash_anterior` (regra 11.6). `ocorrido_em`: relógio do banco |
-| `as_notificacoes` | Cada e-mail a enviar, para não repetir e para retentar | `chave`: idempotência (o mesmo e-mail não sai duas vezes) |
+| `as_notificacoes` | Cada e-mail a enviar, para não repetir e para retentar | `chave`: idempotência (o mesmo e-mail não sai duas vezes). `reservada_em`: reserva de 2 min de quem está mandando agora |
+| `as_envios` | Um registro por envio, para o limite de 30 em 24 h | Fica mesmo se o envelope for excluído: cancelar e excluir não devolve a vaga do dia |
 | `as_entregas_webhook` | Cada aviso de webhook para o sistema do remetente | `tentativas` até 6 |
 
 **Enums** (valores e significado):
@@ -77,11 +78,13 @@ Fonte: `supabase/migrations/20261117130100_as_logica.sql`. Toda função com `se
 | `as_fn_substitui_signatarios` | função | `as_signatarios`, `as_campos` | salvar a lista de destinatários | troca a lista de um rascunho da conta: recusa e-mail repetido e limites (10 assinantes, 5 cópias); mantém quem continua (e os campos), apaga quem saiu, renumera a ordem pela posição, tira os campos de quem virou cópia |
 | `as_fn_anexa_arquivo` | função | `as_envelopes`, `as_campos` | depois de validar um PDF | com o envelope travado e ainda em rascunho, apaga os campos e aponta para o arquivo novo (caminho por versão); devolve o caminho anterior para o servidor apagar |
 | `as_fn_substitui_campos` | função | `as_campos` | salvar o editor de campos | troca todos os campos do rascunho numa transação; até 50 por assinante; assinatura, rubrica, data e nome sempre obrigatórios |
+| `as_fn_envia_envelope` | função | `as_envelopes`, `as_signatarios`, `as_eventos`, `as_notificacoes` | enviar (painel, API, MCP) | numa transação, com a conta e o envelope travados: confere rascunho, arquivo, assinantes e limites (30/24 h, documentos do nível); congela com o hash e o prazo; grava os tokens; põe os da vez em aguardando; registra os eventos; enfileira os convites |
+| `as_fn_reserva_notificacao` | função | `as_notificacoes` | antes de mandar um e-mail | reserva a notificação por 2 min e conta a tentativa; um segundo pedido não passa; reserva vencida (servidor caiu) libera sozinha |
 | `as_fn_entra_conta` | função | `as_contas`, `as_credenciais` | login | cria a conta já com a chave de API, na mesma transação; conta existente atualiza só o e-mail; suspensa não é tocada |
 
-Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `envelope_congelado`, `envelope_em_andamento`, `status_mudou`, `campo_invalido`, `campos_demais`, `nao_encontrado`, `email_repetido`, `assinantes_demais`, `copias_demais`).
+Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `envelope_congelado`, `envelope_em_andamento`, `status_mudou`, `campo_invalido`, `campos_demais`, `status_mudou`, `envelope_mudou`, `sem_assinante`, `limite_diario`, `limite_do_nivel`, `nao_encontrado`, `email_repetido`, `assinantes_demais`, `copias_demais`).
 
-## 4. Mapa tela → tabelas (até o 8.3)
+## 4. Mapa tela → tabelas (até o 8.4)
 
 | Tela / rota | Lê | Escreve | Passa por |
 |---|---|---|---|
@@ -102,6 +105,11 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | `PUT /api/painel/envelopes/{id}/signatarios` | — | `as_signatarios`, `as_campos` | `requireConta`, `as_fn_substitui_signatarios` |
 | `/painel/envelopes/{id}/campos` | `as_envelopes`, `as_signatarios` (assinantes), `as_campos`, URL assinada do original | via PUT | `getCurrentAccount` |
 | `PUT /api/painel/envelopes/{id}/campos` | — | `as_campos` | `requireConta`, `as_fn_substitui_campos` |
+| `/painel/envelopes/{id}/revisar` | `as_envelopes`, `as_signatarios`, `as_campos`, arquivo original | — | `getCurrentAccount` |
+| `POST /api/painel/envelopes/{id}/enviar` | arquivo original | `as_envelopes`, `as_signatarios`, `as_eventos`, `as_notificacoes` | `requireConta`, `validatePdf`, `as_fn_envia_envelope`, `sendInvite` |
+| `/painel/envelopes/{id}` (detalhe mínimo) | `as_envelopes`, `as_signatarios`, `as_notificacoes` | — | `getCurrentAccount` |
+| `POST /api/painel/envelopes/{id}/signatarios/{sid}/convite` | `as_signatarios`, `as_notificacoes` | `as_signatarios` (token), `as_notificacoes`, `as_eventos` | `requireConta`, `sendInvite` |
+| `/painel` e `/painel/conta` (uso do nível) | `as_envelopes` (contagem) | — | `getUsage` |
 | `PUT/GET /api/dev/arquivos/{caminho}` (só dev) | arquivo local | arquivo local | HMAC + validade; 404 em produção ou com R2 |
 
 ## 5. Lógica por tela
@@ -113,6 +121,9 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 - **Novo envelope:** escolher o PDF cria o rascunho (`POST /api/painel/envelopes`, título do nome do arquivo), sobe direto para o armazenamento pela URL assinada (progresso por XHR) e pede a validação. O servidor lê `upload.pdf` numa leitura só, limitada a 10 MB (no R2, com `Range`), apaga o upload, valida a regra 11.1 (`%PDF-`, 10 MB, senha, 1–100 páginas, página ≤ 1.440 pt) e grava **os mesmos bytes que validou** em `original-{versao}.pdf`; `as_fn_anexa_arquivo` aponta o envelope para ele numa transação e o original anterior é apagado. Arquivo inválido: nada muda e a tela mostra a frase da seção 15. Troca válida apaga os campos e avisa. PDF já assinado digitalmente passa, com aviso.
 - **Editar rascunho:** o estado da tela é o que a pessoa digita; cada mudança é gravada com debounce de 800 ms (PATCH das configurações, PUT da lista inteira). A lista só é enviada se estiver válida (nome, e-mail, sem repetido). "Rascunho salvo." só depois da resposta do servidor; falha mostra "Não consegui salvar. Tente de novo." Os botões de avançar só liberam com arquivo, título e ao menos um assinante **salvo**, sem gravação pendente nem erro.
 - **Editor de campos:** o servidor manda as dimensões das páginas, os assinantes, os campos e uma URL assinada de 5 min do original (ver no editor não registra `baixou_original`). O pdf.js (worker em `/pdf.worker.min.mjs`, copiado por `scripts/copy-pdf-worker.mjs` no `predev`/`prebuild`) desenha cada página quando ela chega perto da tela, na largura da coluna. Cada página tem a proporção real (`aspect-ratio`) e os campos ficam por cima em porcentagem, por isso o lugar relativo não muda com a largura. Campo novo: arrastar o tipo para a página (cai onde soltou) ou clicar (cai no centro da página que cruza o meio da tela), com o tamanho padrão da regra 11.3 ajustado à página (`defaultFieldSize`). Mover e redimensionar com o ponteiro, setas (1%), Shift + setas, Delete. Tudo passa por `clampField` (nunca fora da página). Salvamento automático em fila (`use-debounced-save.ts`, o mesmo do rascunho); "Salvar e revisar" grava na hora e só avança se o servidor confirmou. Abaixo de 768 px só aparece o aviso de usar um computador.
+- **Revisar e enviar:** a revisão mostra o resumo e os avisos (assinante sem campo de assinatura num envelope com campos; PDF que já vinha assinado, recalculado lendo o original). "Enviar para assinatura" chama `sendEnvelope`: lê o original, revalida a regra 11.1, calcula o SHA-256, gera um token por assinante e chama `as_fn_envia_envelope`. Depois do commit manda os convites dos da vez (`sendInvite`, com o token que a transação gravou). Cada envio de convite reserva a notificação no banco (`as_fn_reserva_notificacao`): dois pedidos ao mesmo tempo (outra aba, faxina) não mandam dois e-mails nem trocam o link de um convite que pode estar chegando. Conta suspensa não manda convite. Falha de e-mail não desfaz o envio: a notificação fica "falhou", o detalhe mostra a faixa laranja com "Tentar de novo" (link novo) e `retryFailedInvites` (faxina, regra 11.16; rota do cron no 8.13) reenvia até 5 tentativas. Os erros saem com as frases da seção 15 (limites 429, "mudou de situação" 409).
+- **E-mail:** `src/server/email/mailer.ts` escolhe o driver: Resend com `RESEND_API_KEY`; caixa local em `.caixa-de-saida-local/` (um `.txt` e um `.html` por e-mail) só fora de produção; em produção sem chave o app falha. O modelo do convite fica em `templates.ts` (seção 15.2, HTML escapado e texto puro), com remetente "{nome} via Assina" e `reply-to` do remetente.
+- **Uso do nível:** "{n} de {limite} documentos · Nível {n}" no topo da lista e na Conta, em laranja a partir de 80% (`getUsage`).
 - **Armazenamento:** `src/server/files/storage.ts` escolhe o driver. `r2` com as variáveis `R2_*`; `local` (disco em `.armazenamento-local/`, URLs com HMAC servidas por `/api/dev/arquivos`) só fora de produção; em produção sem R2 o app falha.
 
 ## 6. Divergências em relação ao spec
@@ -132,4 +143,7 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | 11 | Driver local de arquivos e rota `/api/dev/arquivos` (só dev) | O bucket R2 ainda não existe (P2); a interface única permite trocar sem tocar no domínio |
 | 12 | Ordem dos assinantes como exclusion constraint diferida, e não índice único parcial (spec v0.5) | Reordenar dentro de uma transação colidia no índice |
 | 13 | Clicar num tipo da paleta também cria o campo (além de arrastar) | Caminho do teclado e do toque; arrastar e soltar nativo não existe no toque |
-| 14 | Migrations ainda não aplicadas no remoto | O hook `guard-production.sh` da sessão em que o épico foi feito (pasta do agenda-psi) bloqueou o `apply_migration`; aguardando o Alexandre |
+| 14 | Reenviar convite gera um link novo, e o anterior deixa de valer | O banco guarda só o hash do token (6.2); o token em claro não existe depois do envio |
+| 15 | Detalhe do envelope em versão mínima (status, destinatários, faixa de convite que falhou) | O 8.4 exige a faixa no detalhe; trilha, ações e downloads são do 8.7 |
+| 16 | E-mail em dev numa caixa local (`.caixa-de-saida-local/`) | Ainda não há chave do Resend (PENDENCIAS P5) |
+| 17 | Migrations ainda não aplicadas no remoto | O hook `guard-production.sh` da sessão em que o épico foi feito (pasta do agenda-psi) bloqueou o `apply_migration`; aguardando o Alexandre |

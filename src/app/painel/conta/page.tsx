@@ -1,8 +1,10 @@
 // [Remetente] Conta — seção 10. No épico 8.1: nome, e-mail e Sair (POST /sair, nunca link).
-// Nível e uso chegam no 8.4; excluir a conta, no 8.12.
+// Nível e uso (regra 11.20) desde o 8.4; excluir a conta, no 8.12.
 import { Suspense } from "react";
 import { copy } from "@/lib/copy";
+import { UsageLine } from "@/features/envelopes/components/usage-line";
 import { getCurrentAccount } from "@/server/auth/require-conta";
+import { getUsage } from "@/server/envelopes/usage";
 import styles from "../painel.module.css";
 import conta from "./conta.module.css";
 
@@ -14,6 +16,9 @@ async function AccountDetails() {
     <div className={conta.card}>
       <p className={conta.name}>{account.nome}</p>
       <p className={conta.email}>{account.email}</p>
+      <div className={conta.usage}>
+        <UsageLine usage={await getUsage(account.id, account.nivel)} />
+      </div>
     </div>
   );
 }

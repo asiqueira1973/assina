@@ -53,3 +53,16 @@ export const A4_PT = { l: 595.28, a: 841.89 } as const;
 export const CAMPO_MIN = 0.01;
 // Passo do teclado no editor (critério 8.3: setas movem 1%).
 export const PASSO_TECLADO = 0.01;
+
+// Regra 11.12: envelopes enviados por conta a cada 24 h (anti-abuso, qualquer nível).
+export const LIMITE_ENVIOS_24H = 30;
+// Regra 11.16: tentativas de cada e-mail (a imediata + as da faxina).
+export const MAX_TENTATIVAS_EMAIL = 5;
+// Regra 11.20: a partir de que fração do limite o uso aparece em laranja.
+export const ALERTA_USO_NIVEL = 0.8;
+// Seção 6.2: bytes aleatórios do token do link do signatário.
+export const TOKEN_SIGNATARIO_BYTES = 32;
+// Convite "pendente" há mais que isto aparece no detalhe como problema (servidor caiu no envio).
+export const CONVITE_PARADO_MS = 5 * 60 * 1000;
+// Timeout de uma chamada ao Resend.
+export const EMAIL_TIMEOUT_MS = 10_000;

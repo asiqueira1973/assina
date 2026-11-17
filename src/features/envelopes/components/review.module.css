@@ -1,0 +1,32 @@
+/* Revisar e enviar / detalhe do envelope (épico 8.4, seção 16): uma coluna, cartões cinza. */
+.page { max-width: 760px; }
+.card { padding: 16px 20px; border-radius: var(--radius-row); background: var(--surface); margin-bottom: 12px; }
+.label { margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.value { margin: 0; font-size: 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.muted { color: var(--text-secondary); }
+.people { list-style: none; margin: 0; padding: 0; }
+.person { display: flex; align-items: center; gap: 12px; padding: 10px 0; }
+.person + .person { border-top: 1px solid var(--hairline); }
+.order { width: 24px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.personText { flex: 1; min-width: 0; }
+.personName { margin: 0; font-size: 16px; font-weight: 600; }
+.personMeta { margin: 2px 0 0; font-size: 14px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.side { font-size: 14px; color: var(--text-secondary); white-space: nowrap; }
+.settings { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.warning, .notice, .error, .success { margin: 0 0 12px; padding: 12px 14px; border-radius: 12px; font-size: 15px; }
+.warning { background: color-mix(in srgb, var(--orange) 14%, transparent); color: var(--text); }
+.notice { background: var(--accent-soft); color: var(--text); }
+.error { background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--red); }
+.success { background: color-mix(in srgb, var(--green) 14%, transparent); color: var(--text); font-weight: 600; }
+.banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.retry { min-height: var(--tap); padding: 0 16px; border: 1px solid var(--hairline); border-radius: 999px; background: var(--bg); color: var(--text); font-size: 15px; font-weight: 600; cursor: pointer; }
+.retry:disabled { opacity: 0.5; }
+.footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--hairline); }
+.footer > .error { flex-basis: 100%; }
+.editLink { display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 18px; border: 1px solid var(--hairline); border-radius: 999px; color: var(--text); font-size: 16px; font-weight: 600; }
+.sendButton { min-height: var(--tap); padding: 0 22px; border: 0; border-radius: 999px; background: var(--accent); color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; }
+.sendButton:disabled { opacity: 0.5; cursor: default; }
+.headerRow { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 8px; }
+.code { margin: 0 0 20px; font-size: 14px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) { .settings { grid-template-columns: 1fr; } }
+.inlineError { flex-basis: 100%; order: 3; font-size: 14px; color: var(--red); }
