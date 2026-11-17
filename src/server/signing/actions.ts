@@ -31,6 +31,7 @@ import { finalizeEnvelope } from "@/server/envelopes/finalize";
 import { runAfterResponse } from "@/server/http";
 import { sendInvite } from "@/server/notifications/invites";
 import { sendNotice } from "@/server/notifications/notices";
+import { deliverEnvelopeWebhooks } from "@/server/webhooks/deliver";
 import type { SignerContext } from "./context";
 
 /** Erro de negócio do signatário, com código estável para a resposta HTTP. */
@@ -205,6 +206,9 @@ export async function sign(ctx: SignerContext, input: z.infer<typeof SignInput>,
     if (result.proximo_id) await sendInvite(result.proximo_id);
   });
   await afterCommit(() => sendNotice(`assinou_remetente:${ctx.signer.id}`));
+  // Webhook signatario.assinou (enfileirado pelo trigger na mesma transação, regra 11.17): sai
+  // depois da resposta, para um endpoint lento não segurar quem assinou (seção 17).
+  await runAfterResponse(() => deliverEnvelopeWebhooks(ctx.envelope.id));
   // Último assinante: o envelope entrou em finalizando. A finalização roda depois da resposta e
   // nunca lança (a falha fica no banco e a faxina retenta).
   if (result.envelope_status === "finalizando") await runAfterResponse(() => finalizeEnvelope(ctx.envelope.id));
@@ -231,6 +235,7 @@ export async function decline(ctx: SignerContext, motivo: string, meta: RequestM
     const { data: others } = await db().from("as_notificacoes").select("chave").eq("envelope_id", ctx.envelope.id).eq("tipo", "recusado_destinatario");
     for (const n of others ?? []) await sendNotice(n.chave);
   });
+  await runAfterResponse(() => deliverEnvelopeWebhooks(ctx.envelope.id));
 }
 
 // E-mails depois do commit: a ação já valeu, então uma falha aqui só fica no log (sem dado

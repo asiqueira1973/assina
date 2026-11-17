@@ -4,7 +4,7 @@ Descreve o sistema **como está implementado**, não como foi planejado (spec.md
 
 | | |
 |---|---|
-| Estado | Épicos 8.0 a 8.8 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
+| Estado | Épicos 8.0 a 8.9 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
 | Stack | Next.js 16.4.6 (App Router, Cache Components, `proxy.ts`), React 19.3, TypeScript, Supabase Postgres (projeto compartilhado, prefixo `as_`), Vitest, pgTAP |
 
 ---
@@ -93,6 +93,10 @@ Fonte: `supabase/migrations/20261117130100_as_logica.sql`. Toda função com `se
 | `as_fn_cancela_envelope` | função | envelope, trilha, notificações, webhooks | Cancelar | `enviado → cancelado`, avisos e webhook |
 | `as_fn_exclui_envelope` | função | envelope (cascata) | Excluir | 7.4: status e título conferidos |
 | `as_fn_verifica_documento` · `as_fn_resumo_publico` | funções | envelopes, signatários, contas | `/verificar` | consulta pública por hash ou código; só o resumo da regra 11.11 |
+| `as_fn_api_lista_envelopes` | função | envelopes | `GET /api/v1/envelopes` | cursor por (criado_em, id) |
+| `as_fn_troca_chave_api` | função | credenciais | Integrações | revoga e grava numa transação |
+| `as_tg_webhook_assinou` | trigger | signatários → entregas | assinar | `signatario.assinou` na mesma transação |
+| `as_fn_reserva_entrega` | função | entregas | webhooks | um envio por vez, até 6 tentativas |
 | `as_fn_conclui_envelope` | função | envelope, trilha, notificações, webhooks | finalizar | `finalizando → concluido` com hash, selo e caminho; eventos `finalizado` e `concluido`; e-mails de conclusão e webhook na mesma transação |
 | `as_fn_falha_finalizacao` | função | envelope, notificações | finalizar | registra a falha só da própria reserva; na 3ª tentativa (ou na `integridade_violada`), alerta ao admin |
 | `as_tg_final_imutavel` | trigger | `as_envelopes` | — | o resultado da finalização não se reescreve |
@@ -129,6 +133,9 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | `GET …/{id}/arquivo?versao=` · `GET …/{id}/trilha.csv` | envelope, trilha | `as_eventos` (`baixou_*`) | `downloadUrl`, `getTrail`, `trailCsv` |
 | `/verificar` (público) | — (o hash é calculado no navegador) | — | `VerifyForm` → `GET /api/verificar?hash=` |
 | `/verificar/{codigo}` (público, o QR do manifesto) e `GET /api/verificar?codigo=` | envelopes, signatários, contas | — | `verifyDocument` → `as_fn_verifica_documento` |
+| `/api/v1/*` (API REST) | as do domínio | as do domínio, com origem e ator `api` | `requireCredential` (só chave de API) → `apiRoute` → as funções de `src/server/envelopes/` |
+| `/painel/integracoes` e `POST /api/painel/integracoes/{chave,revelar,webhook,webhook/teste}` | `as_credenciais`, `as_contas` | `as_credenciais` (troca), `as_contas` (webhook) | `integrationsView`, `rotateApiKey`, `revealSecret`, `saveWebhookUrl`, `sendTestWebhook` |
+| `/docs/api` (público) e `GET /api/v1/openapi.json` | — | — | `openApiDocument` |
 | `POST /api/painel/envelopes/{id}/signatarios/{sid}/convite` | `as_signatarios`, `as_notificacoes` | `as_signatarios` (token), `as_notificacoes`, `as_eventos` | `requireConta`, `sendInvite` |
 | `/painel` e `/painel/conta` (uso do nível) | `as_envelopes` (contagem) | — | `getUsage` |
 | `/assinar/{token}` (signatário) | `as_signatarios`, `as_envelopes`, `as_contas`, `as_campos` | via as rotas abaixo | `loadSignerByToken`, `signerPageState` |
@@ -160,6 +167,23 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
   - "Recusar" chama `decline` (`as_fn_recusa`) e manda os avisos;
   - "visualizou" sai quando a primeira página aparece, uma vez por sessão (pelo `jti`).
 - **Avisos por e-mail:** `src/server/notifications/notices.ts` manda `assinou_remetente`, `recusado_remetente` e `recusado_destinatario` com a mesma reserva do convite; `retryFailedNotices` é a parte da faxina (rota no 8.13).
+- **API REST v1 (épico 8.9):**
+  - Toda rota passa por `apiRoute` (`src/server/api/v1.ts`): Bearer → hash → credencial `api` ativa → conta não suspensa (`src/server/auth/api-credential.ts`), e os erros no formato `{codigo, mensagem}` da 13.2.
+  - As rotas chamam as mesmas funções do painel (princípio 5), com origem e ator `api`.
+  - A criação (`src/server/envelopes/api-create.ts`) respeita a `Idempotency-Key` (índice único por conta) e desfaz o rascunho se qualquer passo falha.
+  - `arquivo_url` passa por `src/server/files/fetch-remote.ts`:
+    - só https;
+    - o IP é conferido no lookup do próprio socket, contra DNS rebinding;
+    - bloqueia privado, loopback, link-local, CGNAT, ULA e metadado de nuvem;
+    - até 3 redirecionamentos conferidos de novo, 10 s e 10 MB.
+  - O documento OpenAPI (`src/server/api/openapi.ts`) é validado no teste.
+- **Webhooks (`src/server/webhooks/deliver.ts`):**
+  - As entregas nascem na transação do fato:
+    - `signatario.assinou`, pelo trigger;
+    - `envelope.concluido`, `envelope.recusado` e `envelope.cancelado`, pelas funções.
+  - Saem logo depois do commit (`deliverEnvelopeWebhooks`), pelo mesmo fetch protegido, sem seguir redirecionamento, com `Assina-Assinatura` (HMAC-SHA256 de `t.corpo`), `Assina-Entrega` e `Assina-Evento`.
+  - Fora de 2xx, a entrega fica "falhou" com o status, e `retryWebhooks` (faxina, 8.13) reentrega até 6 vezes.
+- **Integrações:** a página só recebe o prefixo da chave e a URL. A chave e o segredo em claro saem por `POST /api/painel/integracoes/revelar`, sem cache, quando a pessoa pede. O segredo `whsec_…` nasce com a primeira URL, continua o mesmo quando a URL muda e sai junto com a URL removida.
 - **Verificação pública (épico 8.8):**
   - `/verificar` (`VerifyForm`, cliente) calcula o SHA-256 do PDF com a Web Crypto e manda só o hash para `GET /api/verificar`; o arquivo não sai do computador.
   - O código passa por `normalizeVerificationCode` (`src/lib/verification-code.ts`: minúsculas, espaços, hífens, O→0, I/L→1) e abre `/verificar/{codigo}`, que é renderizada no servidor.
@@ -221,4 +245,12 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | 33 | Envelope não concluído aparece na verificação com o status; "Este envelope ainda não foi concluído." só em enviado e finalizando | A regra 11.11 só exclui rascunhos. O texto da seção 15 existe para esse caso |
 | 34 | O código aceita hífens, minúsculas e as trocas do Crockford (O→0, I/L→1) | Quem copia do papel ou do QR digita como lê; o banco continua com o formato canônico |
 | 35 | Limite por IP só pelo Vercel Firewall, sem contador no app | Critério 8.8 ("regra de firewall"); a regra ainda não foi criada (P8) |
-| 36 | Migrations ainda não aplicadas no remoto | O hook `guard-production.sh` da sessão em que o épico foi feito (pasta do agenda-psi) bloqueou o `apply_migration`; aguardando o Alexandre |
+| 36 | `campos` no `POST /api/v1/envelopes` só junto com `arquivo_url` | Campos precisam das páginas do arquivo; com `upload_url`, o arquivo chega depois, e a v1 não tem rota de campos (o cliente posiciona no editor) |
+| 37 | Rota extra `POST /api/painel/integracoes/revelar` (spec v0.12) | Para a chave e o segredo não irem no HTML da página; só saem quando a pessoa pede "Mostrar" ou "Copiar" |
+| 38 | O webhook usa o mesmo fetch protegido do `arquivo_url` (SSRF) e não segue redirecionamento | A URL é de quem configura: sem isso, daria para o servidor chamar a rede interna ou o metadado de nuvem |
+| 39 | `GET /api/v1/envelopes/{id}/eventos` devolve também `divergencia` (null quando a trilha está íntegra) | Quem integra confere a integridade sem refazer a cadeia |
+| 40 | `POST /lembrar` sem `signatario_id` pula, sem erro, quem recebeu lembrete há menos de 24 h ou já tem 10 | "Lembra todos" não falha por causa de um; com `signatario_id`, os erros valem |
+| 41 | Códigos e status além da lista da 13.2: `lembrete_recente` (429), `limite_lembretes` e `prazo_encerrado` (409), `email_falhou` (502) e o `motivo` `arquivo_ausente` | Vêm das ações do painel que a API reaproveita (8.5 e 8.7) e que a 13.2 não previa; todos com `{codigo, mensagem}` |
+| 42 | Repetir uma `Idempotency-Key` de rascunho ainda sem arquivo devolve uma `upload_url` nova | A resposta do 1º pedido pode ter se perdido; sem isso, o cliente ficaria sem como subir o PDF (achado do verifier) |
+| 43 | Textos de descrição do OpenAPI ficam em `src/server/api/openapi.ts`, não em `copy.ts` | São o contrato da API para quem integra, versionado junto com as rotas; os limites vêm de `limits.ts` |
+| 44 | Migrations ainda não aplicadas no remoto | O hook `guard-production.sh` da sessão em que o épico foi feito (pasta do agenda-psi) bloqueou o `apply_migration`; aguardando o Alexandre |

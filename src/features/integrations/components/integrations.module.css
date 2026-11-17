@@ -1,0 +1,15 @@
+/* Integrações (seção 16): cartões cinza, valores em fonte monoespaçada, botões em pílula. */
+.card { display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; border-radius: var(--radius-row); background: var(--surface); margin-bottom: 16px; max-width: 760px; }
+.heading { margin: 0; font-size: 18px; font-weight: 700; }
+.help { margin: 0; font-size: 14px; color: var(--text-secondary); line-height: 1.45; }
+.value { display: block; padding: 10px 12px; border-radius: 12px; background: var(--bg); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; overflow-wrap: anywhere; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.button { display: inline-flex; align-items: center; justify-content: center; min-height: var(--tap); padding: 0 16px; border: 1px solid var(--hairline); border-radius: 999px; background: var(--bg); color: var(--text); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+.button:disabled { opacity: 0.45; cursor: default; }
+.primary { border: 0; background: var(--accent); color: #fff; }
+.danger { color: var(--red); }
+.input { flex: 1; min-width: 220px; min-height: var(--tap); padding: 0 12px; border: 1px solid var(--hairline); border-radius: 12px; background: var(--bg); color: var(--text); font: inherit; font-size: 15px; }
+.label { font-size: 14px; font-weight: 600; color: var(--text-secondary); }
+.ok { margin: 0; font-size: 14px; color: var(--text-secondary); }
+.error { margin: 0; font-size: 14px; color: var(--red); }
+.confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px; border-radius: 12px; background: color-mix(in srgb, var(--orange) 14%, transparent); font-size: 15px; }

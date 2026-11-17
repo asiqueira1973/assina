@@ -22,6 +22,7 @@ import { db } from "@/server/db/client";
 import { errorCode } from "@/server/error-code";
 import { storage } from "@/server/files/storage";
 import { sendNotice } from "@/server/notifications/notices";
+import { deliverEnvelopeWebhooks } from "@/server/webhooks/deliver";
 import { embedFonts } from "@/server/pdf/fonts";
 import { appendManifest, type ManifestData } from "@/server/pdf/manifest";
 import { sealCredentialsFromEnv, sealPdf } from "@/server/pdf/seal";
@@ -177,6 +178,7 @@ export async function finalizeEnvelope(envelopeId: string): Promise<FinalizeResu
   // Depois do commit: os e-mails de conclusão. Falha aqui não desfaz nada; a faxina retenta.
   const { data: notes } = await db().from("as_notificacoes").select("chave").eq("envelope_id", envelopeId).in("tipo", ["concluido_destinatario", "concluido_remetente"]);
   for (const n of notes ?? []) await safeNotice(n.chave);
+  await deliverEnvelopeWebhooks(envelopeId);
   return "concluido";
 }
 

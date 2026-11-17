@@ -53,6 +53,8 @@ export class DraftError extends Error {
       | "titulo_nao_confere"
       | "email_falhou"
       | "arquivo_indisponivel"
+      | "url_recusada"
+      | "download_falhou"
       | PdfErrorCode,
   ) {
     super(code);

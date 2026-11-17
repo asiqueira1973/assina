@@ -3,7 +3,7 @@
 import "server-only";
 import { z } from "zod";
 import { FIELD_TYPES } from "@/lib/fields";
-import { MAX_ASSINANTES, MAX_CAMPOS_POR_ASSINANTE } from "@/lib/limits";
+import { MAX_ASSINANTES, MAX_CAMPOS_POR_ASSINANTE, ROTULO_MAX } from "@/lib/limits";
 import { db } from "@/server/db/client";
 import type { Database } from "@/server/db/types";
 import { DraftError, getEnvelope } from "./drafts";
@@ -21,7 +21,7 @@ export const FieldInput = z
     largura: z.number().gt(0).max(1),
     altura: z.number().gt(0).max(1),
     obrigatorio: z.boolean().default(true),
-    rotulo: z.string().trim().max(60).nullable().optional(),
+    rotulo: z.string().trim().max(ROTULO_MAX).nullable().optional(),
   })
   // Critério 8.3: nunca grava campo que passa da borda (o editor já empurra para dentro).
   .refine((f) => f.x + f.largura <= 1 && f.y + f.altura <= 1, { message: "fora_da_pagina" });

@@ -13,6 +13,8 @@ import { reminderEmail } from "@/server/email/templates";
 import { errorCode } from "@/server/error-code";
 import { envelopePaths, storage } from "@/server/files/storage";
 import { sendNotice } from "@/server/notifications/notices";
+import { runAfterResponse } from "@/server/http";
+import { deliverEnvelopeWebhooks } from "@/server/webhooks/deliver";
 import { DraftError, getEnvelope, type RequestMeta } from "./drafts";
 import { generateSignerToken, signerLink } from "./signer-token";
 
@@ -155,6 +157,8 @@ export async function cancelEnvelope(contaId: string, envelopeId: string, motivo
       console.error("aviso_pos_commit_falhou", errorCode(e));
     }
   }
+  // Webhook envelope.cancelado depois da resposta (um endpoint lento não segura a tela).
+  await runAfterResponse(() => deliverEnvelopeWebhooks(envelopeId));
 }
 
 // Exclui (seção 7.4): o banco confere status e título e apaga em cascata; depois, a pasta do
@@ -174,7 +178,7 @@ export async function deleteEnvelope(contaId: string, envelopeId: string, titulo
 // Download do original ou do final pelo remetente (13.1): registra baixou_* e devolve a URL
 // assinada de 5 min. Lança DraftError: nao_encontrado, arquivo_indisponivel (sem arquivo,
 // expurgado, ou final antes de concluir).
-export async function downloadUrl(contaId: string, envelopeId: string, versao: "original" | "final", meta: RequestMeta): Promise<string> {
+export async function downloadUrl(contaId: string, envelopeId: string, versao: "original" | "final", meta: RequestMeta, ator: Actor = "remetente"): Promise<string> {
   const e = await getEnvelope(contaId, envelopeId);
   if (!e) throw new DraftError("nao_encontrado");
   const path = versao === "final" ? (e.status === "concluido" ? e.arquivo_final_path : null) : e.arquivo_original_path;
@@ -184,7 +188,7 @@ export async function downloadUrl(contaId: string, envelopeId: string, versao: "
     const { error } = await db().rpc("as_fn_registra_evento", {
       p_envelope_id: e.id,
       p_tipo: versao === "final" ? "baixou_final" : "baixou_original",
-      p_ator: "remetente",
+      p_ator: ator,
       p_ip: meta.ip ?? undefined,
       p_user_agent: meta.userAgent ?? undefined,
     });
@@ -197,6 +201,7 @@ export async function downloadUrl(contaId: string, envelopeId: string, versao: "
 export type TrailEvent = {
   seq: number;
   tipo: keyof typeof copy.events;
+  signatario_id: string | null;
   ator: Actor;
   pessoa: string | null;
   email: string | null;
@@ -215,7 +220,7 @@ export async function getTrail(contaId: string, envelopeId: string): Promise<{ e
   const [{ data: rows, error }, { data: check, error: cErr }] = await Promise.all([
     db()
       .from("as_eventos")
-      .select("seq, tipo, ator, ip, user_agent, dados, ocorrido_em, hash, as_signatarios(nome, email)")
+      .select("seq, tipo, ator, signatario_id, ip, user_agent, dados, ocorrido_em, hash, as_signatarios(nome, email)")
       .eq("envelope_id", envelopeId)
       .order("seq"),
     db().rpc("as_fn_verifica_trilha", { p_envelope_id: envelopeId }),
@@ -224,6 +229,7 @@ export async function getTrail(contaId: string, envelopeId: string): Promise<{ e
   const events = (rows ?? []).map((r) => ({
     seq: r.seq,
     tipo: r.tipo as keyof typeof copy.events,
+    signatario_id: r.signatario_id,
     ator: r.ator,
     pessoa: r.as_signatarios?.nome ?? null,
     email: r.as_signatarios?.email ?? null,

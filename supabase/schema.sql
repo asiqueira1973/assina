@@ -224,6 +224,80 @@ $$;
 
 ALTER FUNCTION "public"."as_fn_anexa_arquivo"("p_envelope_id" "uuid", "p_conta_id" "uuid", "p_caminho" "text", "p_nome" "text", "p_tamanho" integer, "p_paginas" smallint, "p_dimensoes" "jsonb") OWNER TO "postgres";
 
+SET default_tablespace = '';
+
+SET default_table_access_method = "heap";
+
+
+CREATE TABLE IF NOT EXISTS "public"."as_envelopes" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "conta_id" "uuid" NOT NULL,
+    "titulo" "text" NOT NULL,
+    "mensagem" "text",
+    "status" "public"."as_status_envelope" DEFAULT 'rascunho'::"public"."as_status_envelope" NOT NULL,
+    "origem" "public"."as_origem" NOT NULL,
+    "em_ordem" boolean DEFAULT false NOT NULL,
+    "prazo_dias" smallint DEFAULT 30 NOT NULL,
+    "prazo_em" timestamp with time zone,
+    "lembrete_cada_dias" smallint DEFAULT 3,
+    "nome_arquivo" "text",
+    "arquivo_original_path" "text",
+    "tamanho_bytes" integer,
+    "paginas" smallint,
+    "dimensoes_paginas" "jsonb",
+    "hash_original" "text",
+    "arquivo_final_path" "text",
+    "hash_final" "text",
+    "selo" "text",
+    "codigo_verificacao" "text" NOT NULL,
+    "chave_idempotencia" "text",
+    "tentativas_finalizacao" smallint DEFAULT 0 NOT NULL,
+    "motivo_cancelamento" "text",
+    "enviado_em" timestamp with time zone,
+    "concluido_em" timestamp with time zone,
+    "encerrado_em" timestamp with time zone,
+    "arquivos_expurgados_em" timestamp with time zone,
+    "criado_em" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "atualizado_em" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "finalizacao_reserva" "uuid",
+    "finalizacao_reservada_em" timestamp with time zone,
+    "erro_finalizacao" "text",
+    CONSTRAINT "as_envelopes_chave_idempotencia_check" CHECK ((("chave_idempotencia" IS NULL) OR (("char_length"("chave_idempotencia") >= 1) AND ("char_length"("chave_idempotencia") <= 100)))),
+    CONSTRAINT "as_envelopes_codigo_verificacao_check" CHECK (("codigo_verificacao" ~ '^[0-9A-HJKMNP-TV-Z]{12}$'::"text")),
+    CONSTRAINT "as_envelopes_erro_finalizacao_check" CHECK ((("erro_finalizacao" IS NULL) OR ("char_length"("erro_finalizacao") <= 200))),
+    CONSTRAINT "as_envelopes_hash_final_check" CHECK ((("hash_final" IS NULL) OR ("hash_final" ~ '^[0-9a-f]{64}$'::"text"))),
+    CONSTRAINT "as_envelopes_hash_original_check" CHECK ((("hash_original" IS NULL) OR ("hash_original" ~ '^[0-9a-f]{64}$'::"text"))),
+    CONSTRAINT "as_envelopes_lembrete_cada_dias_check" CHECK ((("lembrete_cada_dias" IS NULL) OR ("lembrete_cada_dias" = ANY (ARRAY[2, 3, 7])))),
+    CONSTRAINT "as_envelopes_mensagem_check" CHECK ((("mensagem" IS NULL) OR ("char_length"("mensagem") <= 1000))),
+    CONSTRAINT "as_envelopes_motivo_cancelamento_check" CHECK ((("motivo_cancelamento" IS NULL) OR ("char_length"("motivo_cancelamento") <= 500))),
+    CONSTRAINT "as_envelopes_nome_arquivo_check" CHECK ((("nome_arquivo" IS NULL) OR ("char_length"("nome_arquivo") <= 200))),
+    CONSTRAINT "as_envelopes_paginas_check" CHECK ((("paginas" IS NULL) OR (("paginas" >= 1) AND ("paginas" <= 100)))),
+    CONSTRAINT "as_envelopes_prazo_dias_check" CHECK ((("prazo_dias" >= 1) AND ("prazo_dias" <= 90))),
+    CONSTRAINT "as_envelopes_selo_check" CHECK ((("selo" IS NULL) OR ("selo" = ANY (ARRAY['B-B'::"text", 'B-T'::"text"])))),
+    CONSTRAINT "as_envelopes_tamanho_bytes_check" CHECK ((("tamanho_bytes" IS NULL) OR (("tamanho_bytes" >= 1) AND ("tamanho_bytes" <= 10485760)))),
+    CONSTRAINT "as_envelopes_titulo_check" CHECK ((("char_length"("titulo") >= 1) AND ("char_length"("titulo") <= 120)))
+);
+
+
+ALTER TABLE "public"."as_envelopes" OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."as_fn_api_lista_envelopes"("p_conta_id" "uuid", "p_status" "public"."as_status_envelope", "p_limite" integer, "p_cursor_criado" timestamp with time zone, "p_cursor_id" "uuid") RETURNS SETOF "public"."as_envelopes"
+    LANGUAGE "sql" STABLE
+    SET "search_path" TO ''
+    AS $$
+  select e.*
+    from public.as_envelopes e
+   where e.conta_id = p_conta_id
+     and (p_status is null or e.status = p_status)
+     and (p_cursor_criado is null or (e.criado_em, e.id) < (p_cursor_criado, p_cursor_id))
+   order by e.criado_em desc, e.id desc
+   limit greatest(least(p_limite, 101), 1);
+$$;
+
+
+ALTER FUNCTION "public"."as_fn_api_lista_envelopes"("p_conta_id" "uuid", "p_status" "public"."as_status_envelope", "p_limite" integer, "p_cursor_criado" timestamp with time zone, "p_cursor_id" "uuid") OWNER TO "postgres";
+
 
 CREATE OR REPLACE FUNCTION "public"."as_fn_assina"("p_signatario_id" "uuid", "p_token_hash" "text", "p_metodo" "public"."as_metodo_assinatura", "p_assinatura_texto" "text", "p_assinatura_path" "text", "p_rubrica_texto" "text", "p_rubrica_path" "text", "p_cpf" "text", "p_campos" "jsonb", "p_consentimento" "text", "p_ip" "inet" DEFAULT NULL::"inet", "p_user_agent" "text" DEFAULT NULL::"text") RETURNS TABLE("envelope_status" "public"."as_status_envelope", "proximo_id" "uuid")
     LANGUAGE "plpgsql"
@@ -515,63 +589,6 @@ $$;
 
 
 ALTER FUNCTION "public"."as_fn_copia_link"("p_conta_id" "uuid", "p_envelope_id" "uuid", "p_signatario_id" "uuid", "p_token_hash" "text", "p_ator" "public"."as_ator", "p_ip" "inet", "p_user_agent" "text") OWNER TO "postgres";
-
-SET default_tablespace = '';
-
-SET default_table_access_method = "heap";
-
-
-CREATE TABLE IF NOT EXISTS "public"."as_envelopes" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "conta_id" "uuid" NOT NULL,
-    "titulo" "text" NOT NULL,
-    "mensagem" "text",
-    "status" "public"."as_status_envelope" DEFAULT 'rascunho'::"public"."as_status_envelope" NOT NULL,
-    "origem" "public"."as_origem" NOT NULL,
-    "em_ordem" boolean DEFAULT false NOT NULL,
-    "prazo_dias" smallint DEFAULT 30 NOT NULL,
-    "prazo_em" timestamp with time zone,
-    "lembrete_cada_dias" smallint DEFAULT 3,
-    "nome_arquivo" "text",
-    "arquivo_original_path" "text",
-    "tamanho_bytes" integer,
-    "paginas" smallint,
-    "dimensoes_paginas" "jsonb",
-    "hash_original" "text",
-    "arquivo_final_path" "text",
-    "hash_final" "text",
-    "selo" "text",
-    "codigo_verificacao" "text" NOT NULL,
-    "chave_idempotencia" "text",
-    "tentativas_finalizacao" smallint DEFAULT 0 NOT NULL,
-    "motivo_cancelamento" "text",
-    "enviado_em" timestamp with time zone,
-    "concluido_em" timestamp with time zone,
-    "encerrado_em" timestamp with time zone,
-    "arquivos_expurgados_em" timestamp with time zone,
-    "criado_em" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "atualizado_em" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "finalizacao_reserva" "uuid",
-    "finalizacao_reservada_em" timestamp with time zone,
-    "erro_finalizacao" "text",
-    CONSTRAINT "as_envelopes_chave_idempotencia_check" CHECK ((("chave_idempotencia" IS NULL) OR (("char_length"("chave_idempotencia") >= 1) AND ("char_length"("chave_idempotencia") <= 100)))),
-    CONSTRAINT "as_envelopes_codigo_verificacao_check" CHECK (("codigo_verificacao" ~ '^[0-9A-HJKMNP-TV-Z]{12}$'::"text")),
-    CONSTRAINT "as_envelopes_erro_finalizacao_check" CHECK ((("erro_finalizacao" IS NULL) OR ("char_length"("erro_finalizacao") <= 200))),
-    CONSTRAINT "as_envelopes_hash_final_check" CHECK ((("hash_final" IS NULL) OR ("hash_final" ~ '^[0-9a-f]{64}$'::"text"))),
-    CONSTRAINT "as_envelopes_hash_original_check" CHECK ((("hash_original" IS NULL) OR ("hash_original" ~ '^[0-9a-f]{64}$'::"text"))),
-    CONSTRAINT "as_envelopes_lembrete_cada_dias_check" CHECK ((("lembrete_cada_dias" IS NULL) OR ("lembrete_cada_dias" = ANY (ARRAY[2, 3, 7])))),
-    CONSTRAINT "as_envelopes_mensagem_check" CHECK ((("mensagem" IS NULL) OR ("char_length"("mensagem") <= 1000))),
-    CONSTRAINT "as_envelopes_motivo_cancelamento_check" CHECK ((("motivo_cancelamento" IS NULL) OR ("char_length"("motivo_cancelamento") <= 500))),
-    CONSTRAINT "as_envelopes_nome_arquivo_check" CHECK ((("nome_arquivo" IS NULL) OR ("char_length"("nome_arquivo") <= 200))),
-    CONSTRAINT "as_envelopes_paginas_check" CHECK ((("paginas" IS NULL) OR (("paginas" >= 1) AND ("paginas" <= 100)))),
-    CONSTRAINT "as_envelopes_prazo_dias_check" CHECK ((("prazo_dias" >= 1) AND ("prazo_dias" <= 90))),
-    CONSTRAINT "as_envelopes_selo_check" CHECK ((("selo" IS NULL) OR ("selo" = ANY (ARRAY['B-B'::"text", 'B-T'::"text"])))),
-    CONSTRAINT "as_envelopes_tamanho_bytes_check" CHECK ((("tamanho_bytes" IS NULL) OR (("tamanho_bytes" >= 1) AND ("tamanho_bytes" <= 10485760)))),
-    CONSTRAINT "as_envelopes_titulo_check" CHECK ((("char_length"("titulo") >= 1) AND ("char_length"("titulo") <= 120)))
-);
-
-
-ALTER TABLE "public"."as_envelopes" OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."as_fn_cria_rascunho"("p_conta_id" "uuid", "p_titulo" "text", "p_origem" "public"."as_origem", "p_codigo_verificacao" "text", "p_ator" "public"."as_ator", "p_ip" "inet" DEFAULT NULL::"inet", "p_user_agent" "text" DEFAULT NULL::"text") RETURNS "public"."as_envelopes"
@@ -1266,6 +1283,25 @@ $$;
 ALTER FUNCTION "public"."as_fn_registra_evento"("p_envelope_id" "uuid", "p_tipo" "public"."as_tipo_evento", "p_ator" "public"."as_ator", "p_signatario_id" "uuid", "p_ip" "inet", "p_user_agent" "text", "p_dados" "jsonb") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."as_fn_reserva_entrega"("p_id" "uuid", "p_max" integer) RETURNS boolean
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  update public.as_entregas_webhook
+     set reservada_em = now(), tentativas = tentativas + 1
+   where id = p_id
+     and status <> 'entregue'
+     and tentativas < p_max
+     and (reservada_em is null or reservada_em < now() - interval '2 minutes');
+  return found;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."as_fn_reserva_entrega"("p_id" "uuid", "p_max" integer) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."as_fn_reserva_finalizacao"("p_envelope_id" "uuid", "p_max_tentativas" integer) RETURNS TABLE("resultado" "text", "reserva" "uuid")
     LANGUAGE "plpgsql"
     SET "search_path" TO ''
@@ -1569,6 +1605,23 @@ $$;
 ALTER FUNCTION "public"."as_fn_transicao_envelope"("p_envelope_id" "uuid", "p_de" "public"."as_status_envelope", "p_para" "public"."as_status_envelope") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."as_fn_troca_chave_api"("p_conta_id" "uuid", "p_hash" "text", "p_prefixo" "text", "p_cifrado" "text") RETURNS "void"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('as_chave:' || p_conta_id::text, 0));
+  update public.as_credenciais set revogada_em = now()
+   where conta_id = p_conta_id and tipo = 'api' and revogada_em is null;
+  insert into public.as_credenciais (conta_id, tipo, nome, prefixo, valor_hash, valor_cifrado)
+  values (p_conta_id, 'api', 'Chave de API', p_prefixo, p_hash, p_cifrado);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."as_fn_troca_chave_api"("p_conta_id" "uuid", "p_hash" "text", "p_prefixo" "text", "p_cifrado" "text") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."as_fn_valida_campo"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     SET "search_path" TO ''
@@ -1728,6 +1781,36 @@ $$;
 ALTER FUNCTION "public"."as_fn_verifica_trilha"("p_envelope_id" "uuid") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."as_fn_webhook_assinou"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  v_e public.as_envelopes;
+  v_webhook text;
+begin
+  if new.status = 'assinou' and old.status is distinct from 'assinou' then
+    select webhook_url into v_webhook from public.as_contas where id = new.conta_id;
+    if v_webhook is not null then
+      select * into v_e from public.as_envelopes where id = new.envelope_id;
+      insert into public.as_entregas_webhook (conta_id, envelope_id, evento, corpo)
+      values (new.conta_id, new.envelope_id, 'signatario.assinou', jsonb_build_object(
+        'evento', 'signatario.assinou',
+        'envelope', jsonb_build_object('id', v_e.id, 'status', v_e.status, 'titulo', v_e.titulo,
+          'codigo_verificacao', v_e.codigo_verificacao, 'concluido_em', v_e.concluido_em, 'hash_final', v_e.hash_final),
+        'signatario', jsonb_build_object('id', new.id, 'email', new.email, 'assinado_em', new.assinado_em),
+        'ocorrido_em', now()
+      ));
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."as_fn_webhook_assinou"() OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."as_contas" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "google_sub" "text" NOT NULL,
@@ -1781,6 +1864,7 @@ CREATE TABLE IF NOT EXISTS "public"."as_entregas_webhook" (
     "ultimo_status_http" smallint,
     "criado_em" timestamp with time zone DEFAULT "now"() NOT NULL,
     "entregue_em" timestamp with time zone,
+    "reservada_em" timestamp with time zone,
     CONSTRAINT "as_entregas_webhook_evento_check" CHECK (("evento" = ANY (ARRAY['signatario.assinou'::"text", 'envelope.concluido'::"text", 'envelope.recusado'::"text", 'envelope.cancelado'::"text", 'envelope.expirado'::"text"]))),
     CONSTRAINT "as_entregas_webhook_tentativas_check" CHECK ((("tentativas" >= 0) AND ("tentativas" <= 6)))
 );
@@ -1974,6 +2058,10 @@ CREATE INDEX "as_entregas_status_idx" ON "public"."as_entregas_webhook" USING "b
 
 
 
+CREATE INDEX "as_entregas_webhook_pendentes_idx" ON "public"."as_entregas_webhook" USING "btree" ("status") WHERE ("status" <> 'entregue'::"public"."as_status_entrega");
+
+
+
 CREATE INDEX "as_envelopes_conta_criado_idx" ON "public"."as_envelopes" USING "btree" ("conta_id", "criado_em" DESC);
 
 
@@ -2075,6 +2163,10 @@ CREATE OR REPLACE TRIGGER "as_tg_final_imutavel" BEFORE UPDATE ON "public"."as_e
 
 
 CREATE OR REPLACE TRIGGER "as_tg_valida_campo" BEFORE INSERT OR UPDATE ON "public"."as_campos" FOR EACH ROW EXECUTE FUNCTION "public"."as_fn_valida_campo"();
+
+
+
+CREATE OR REPLACE TRIGGER "as_tg_webhook_assinou" AFTER UPDATE OF "status" ON "public"."as_signatarios" FOR EACH ROW EXECUTE FUNCTION "public"."as_fn_webhook_assinou"();
 
 
 
@@ -2213,6 +2305,15 @@ GRANT ALL ON FUNCTION "public"."as_fn_anexa_arquivo"("p_envelope_id" "uuid", "p_
 
 
 
+GRANT ALL ON TABLE "public"."as_envelopes" TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."as_fn_api_lista_envelopes"("p_conta_id" "uuid", "p_status" "public"."as_status_envelope", "p_limite" integer, "p_cursor_criado" timestamp with time zone, "p_cursor_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_api_lista_envelopes"("p_conta_id" "uuid", "p_status" "public"."as_status_envelope", "p_limite" integer, "p_cursor_criado" timestamp with time zone, "p_cursor_id" "uuid") TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."as_fn_assina"("p_signatario_id" "uuid", "p_token_hash" "text", "p_metodo" "public"."as_metodo_assinatura", "p_assinatura_texto" "text", "p_assinatura_path" "text", "p_rubrica_texto" "text", "p_rubrica_path" "text", "p_cpf" "text", "p_campos" "jsonb", "p_consentimento" "text", "p_ip" "inet", "p_user_agent" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."as_fn_assina"("p_signatario_id" "uuid", "p_token_hash" "text", "p_metodo" "public"."as_metodo_assinatura", "p_assinatura_texto" "text", "p_assinatura_path" "text", "p_rubrica_texto" "text", "p_rubrica_path" "text", "p_cpf" "text", "p_campos" "jsonb", "p_consentimento" "text", "p_ip" "inet", "p_user_agent" "text") TO "service_role";
 
@@ -2240,10 +2341,6 @@ GRANT ALL ON FUNCTION "public"."as_fn_confirma_lembrete"("p_conta_id" "uuid", "p
 
 REVOKE ALL ON FUNCTION "public"."as_fn_copia_link"("p_conta_id" "uuid", "p_envelope_id" "uuid", "p_signatario_id" "uuid", "p_token_hash" "text", "p_ator" "public"."as_ator", "p_ip" "inet", "p_user_agent" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."as_fn_copia_link"("p_conta_id" "uuid", "p_envelope_id" "uuid", "p_signatario_id" "uuid", "p_token_hash" "text", "p_ator" "public"."as_ator", "p_ip" "inet", "p_user_agent" "text") TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."as_envelopes" TO "service_role";
 
 
 
@@ -2340,6 +2437,11 @@ GRANT ALL ON FUNCTION "public"."as_fn_registra_evento"("p_envelope_id" "uuid", "
 
 
 
+REVOKE ALL ON FUNCTION "public"."as_fn_reserva_entrega"("p_id" "uuid", "p_max" integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_reserva_entrega"("p_id" "uuid", "p_max" integer) TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."as_fn_reserva_finalizacao"("p_envelope_id" "uuid", "p_max_tentativas" integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."as_fn_reserva_finalizacao"("p_envelope_id" "uuid", "p_max_tentativas" integer) TO "service_role";
 
@@ -2384,6 +2486,11 @@ GRANT ALL ON FUNCTION "public"."as_fn_transicao_envelope"("p_envelope_id" "uuid"
 
 
 
+REVOKE ALL ON FUNCTION "public"."as_fn_troca_chave_api"("p_conta_id" "uuid", "p_hash" "text", "p_prefixo" "text", "p_cifrado" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_troca_chave_api"("p_conta_id" "uuid", "p_hash" "text", "p_prefixo" "text", "p_cifrado" "text") TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."as_fn_valida_campo"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."as_fn_valida_campo"() TO "service_role";
 
@@ -2401,6 +2508,11 @@ GRANT ALL ON FUNCTION "public"."as_fn_verifica_documento"("p_hash" "text", "p_co
 
 REVOKE ALL ON FUNCTION "public"."as_fn_verifica_trilha"("p_envelope_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."as_fn_verifica_trilha"("p_envelope_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."as_fn_webhook_assinou"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_webhook_assinou"() TO "service_role";
 
 
 

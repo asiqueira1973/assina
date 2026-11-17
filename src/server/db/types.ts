@@ -76,14 +76,14 @@ isOneToOne: false
                   ]
                 },"as_entregas_webhook": {
                   Row: {
-                    "conta_id": string,"corpo": NonNullable<Json>,"criado_em": string,"entregue_em": string | null,"envelope_id": string,"evento": string,"id": string,"status": Database["public"]['Enums']["as_status_entrega"],"tentativas": number,"ultimo_status_http": number | null
+                    "conta_id": string,"corpo": NonNullable<Json>,"criado_em": string,"entregue_em": string | null,"envelope_id": string,"evento": string,"id": string,"reservada_em": string | null,"status": Database["public"]['Enums']["as_status_entrega"],"tentativas": number,"ultimo_status_http": number | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "conta_id": string,"corpo": NonNullable<Json>,"criado_em"?: string,"entregue_em"?: string | null,"envelope_id": string,"evento": string,"id"?: string,"status"?: Database["public"]['Enums']["as_status_entrega"],"tentativas"?: number,"ultimo_status_http"?: number | null
+                    "conta_id": string,"corpo": NonNullable<Json>,"criado_em"?: string,"entregue_em"?: string | null,"envelope_id": string,"evento": string,"id"?: string,"reservada_em"?: string | null,"status"?: Database["public"]['Enums']["as_status_entrega"],"tentativas"?: number,"ultimo_status_http"?: number | null
                   }
                   Update: {
-                    "conta_id"?: string,"corpo"?: NonNullable<Json>,"criado_em"?: string,"entregue_em"?: string | null,"envelope_id"?: string,"evento"?: string,"id"?: string,"status"?: Database["public"]['Enums']["as_status_entrega"],"tentativas"?: number,"ultimo_status_http"?: number | null
+                    "conta_id"?: string,"corpo"?: NonNullable<Json>,"criado_em"?: string,"entregue_em"?: string | null,"envelope_id"?: string,"evento"?: string,"id"?: string,"reservada_em"?: string | null,"status"?: Database["public"]['Enums']["as_status_entrega"],"tentativas"?: number,"ultimo_status_http"?: number | null
                   }
                   Relationships: [
                     {
@@ -278,6 +278,47 @@ isOneToOne: false
               "caminho_anterior": string,"campos_removidos": boolean
             }[]
                            },
+"as_fn_api_lista_envelopes":
+{ Args: { "p_conta_id": string,"p_cursor_criado": string,"p_cursor_id": string,"p_limite": number,"p_status": Database["public"]['Enums']["as_status_envelope"] }; Returns: {
+              "arquivo_final_path": string | null,
+"arquivo_original_path": string | null,
+"arquivos_expurgados_em": string | null,
+"atualizado_em": string,
+"chave_idempotencia": string | null,
+"codigo_verificacao": string,
+"concluido_em": string | null,
+"conta_id": string,
+"criado_em": string,
+"dimensoes_paginas": Json | null,
+"em_ordem": boolean,
+"encerrado_em": string | null,
+"enviado_em": string | null,
+"erro_finalizacao": string | null,
+"finalizacao_reserva": string | null,
+"finalizacao_reservada_em": string | null,
+"hash_final": string | null,
+"hash_original": string | null,
+"id": string,
+"lembrete_cada_dias": number | null,
+"mensagem": string | null,
+"motivo_cancelamento": string | null,
+"nome_arquivo": string | null,
+"origem": Database["public"]['Enums']["as_origem"],
+"paginas": number | null,
+"prazo_dias": number,
+"prazo_em": string | null,
+"selo": string | null,
+"status": Database["public"]['Enums']["as_status_envelope"],
+"tamanho_bytes": number | null,
+"tentativas_finalizacao": number,
+"titulo": string
+            }[]
+                          SetofOptions: {
+        from: "*"
+        to: "as_envelopes"
+        isOneToOne: false
+        isSetofReturn: true
+      } },
 "as_fn_assina":
 { Args: { "p_assinatura_path": string,"p_assinatura_texto": string,"p_campos": Json,"p_consentimento": string,"p_cpf": string,"p_ip"?: unknown,"p_metodo": Database["public"]['Enums']["as_metodo_assinatura"],"p_rubrica_path": string,"p_rubrica_texto": string,"p_signatario_id": string,"p_token_hash": string,"p_user_agent"?: string }; Returns: {
               "envelope_status": Database["public"]['Enums']["as_status_envelope"],"proximo_id": string
@@ -427,6 +468,9 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"as_fn_reserva_entrega":
+{ Args: { "p_id": string,"p_max": number }; Returns: boolean
+                           },
 "as_fn_reserva_finalizacao":
 { Args: { "p_envelope_id": string,"p_max_tentativas": number }; Returns: {
               "reserva": string,"resultado": string
@@ -546,6 +590,9 @@ isOneToOne: false
       } },
 "as_fn_transicao_envelope":
 { Args: { "p_de": Database["public"]['Enums']["as_status_envelope"],"p_envelope_id": string,"p_para": Database["public"]['Enums']["as_status_envelope"] }; Returns: boolean
+                           },
+"as_fn_troca_chave_api":
+{ Args: { "p_cifrado": string,"p_conta_id": string,"p_hash": string,"p_prefixo": string }; Returns: undefined
                            },
 "as_fn_valida_codigo":
 { Args: { "p_codigo_hash": string,"p_ip"?: unknown,"p_max_tentativas": number,"p_signatario_id": string,"p_user_agent"?: string }; Returns: {

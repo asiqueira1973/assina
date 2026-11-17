@@ -5,7 +5,7 @@ import { after, type NextRequest } from "next/server";
 import { DraftError, type RequestMeta } from "@/server/envelopes/drafts";
 import { errorCode } from "@/server/error-code";
 
-const PDF_CODES = new Set(["nao_e_pdf", "grande_demais", "paginas_demais", "protegido_por_senha", "pagina_grande_demais", "arquivo_ausente"]);
+const PDF_CODES = new Set(["nao_e_pdf", "grande_demais", "paginas_demais", "protegido_por_senha", "pagina_grande_demais", "arquivo_ausente", "url_recusada", "download_falhou"]);
 
 // IP e user agent de quem pediu, para a trilha (regra 11.6). IP do primeiro x-forwarded-for
 // (Vercel), sem validar além do formato que o banco aceita (inet).

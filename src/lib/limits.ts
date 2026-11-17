@@ -102,3 +102,16 @@ export const LEMBRETE_MANUAL_INTERVALO_H = 24; // regra 11.5
 export const MAX_LEMBRETES = 10; // regra 11.5
 export const BUSCA_MAX = 100; // tamanho da busca da lista
 export const MOTIVO_CANCELAMENTO_MAX = 500; // coluna motivo_cancelamento
+
+// API REST v1 e webhooks (épico 8.9, seção 13.2 e regras 11.17 e 11.18).
+export const REMOTO_TIMEOUT_MS = 10_000; // regra 11.18
+export const REMOTO_REDIRECIONAMENTOS = 3; // regra 11.18
+export const API_LISTA_PADRAO = 20; // 13.2: limite padrão da lista
+export const API_LISTA_MAX = 100; // 13.2
+export const IDEMPOTENCIA_MAX = 100; // 13.2: Idempotency-Key de 1 a 100 caracteres
+export const ARQUIVO_URL_MAX = 2000;
+export const WEBHOOK_TIMEOUT_MS = 10_000; // regra 11.17
+export const WEBHOOK_TENTATIVAS = 6; // regra 11.17: a imediata + uma por faxina
+export const WEBHOOK_URL_MAX = 500; // coluna as_contas.webhook_url
+export const WEBHOOK_RESPOSTA_MAX = 64 * 1024; // lê no máximo isso da resposta do webhook
+export const ROTULO_MAX = 60; // as_campos.rotulo (dica do campo)

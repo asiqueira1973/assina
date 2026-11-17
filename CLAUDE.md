@@ -9,7 +9,7 @@ Se um teste falhar, corrija o código, não o teste; nunca pule nem apague teste
 Bug: teste que reproduz → ver falhar → commit → `touch .claude/fix-mode` → corrigir → `rm .claude/fix-mode`.
 
 ## Estado
-Épicos 8.0 a 8.8 (rascunho, upload, editor de campos, envio, assinatura, finalização com manifesto e selo, painel e verificação pública) concluídos. Migrations aplicadas só no **local**; pendências do Alexandre em `PENDENCIAS.md`. Próximo: 8.9 (API REST v1 e webhooks). E-mail em dev vai para `.caixa-de-saida-local/`.
+Épicos 8.0 a 8.9 (rascunho, upload, editor de campos, envio, assinatura, finalização com manifesto e selo, painel, verificação pública, API REST e webhooks) concluídos. Migrations aplicadas só no **local**; pendências do Alexandre em `PENDENCIAS.md`. Próximo: 8.10 (MCP e OAuth). E-mail em dev vai para `.caixa-de-saida-local/`.
 
 ## Convenções (seção 18)
 - Banco em português `snake_case`, **sempre com prefixo `as_`** (projeto Supabase compartilhado `jeesdmfcrmhyufwzwzwt`). Código, variáveis e arquivos em inglês; fronteira em `src/server/db/`.
@@ -44,4 +44,5 @@ Bug: teste que reproduz → ver falhar → commit → `touch .claude/fix-mode` �
 - Texto desenhado no PDF passa por `safeText` (`src/server/pdf/fonts.ts`): a Helvetica padrão só tem WinAnsi, e um "−" ou "Ł" quebraria o `drawText`. Selo e certificado de teste: `tests/fixtures/seal.ts` (o `tests/setup.ts` já põe no ambiente).
 - `next typegen` gera `PageProps`/`LayoutProps`: rode `npm run typecheck`, não `tsc` direto.
 - Enquanto os hooks do Assina não disparam na sessão (PENDENCIAS P4), os guardas rodam à mão, e um bloqueio tem de **impedir o commit** (`[ "$n" -eq 0 ] && git commit …`). No 8.8, um bloqueio do `guard-secrets` (componente de cliente importando tipo de `src/server/`) passou porque o commit vinha encadeado depois da varredura. Tipos usados pelo cliente moram fora de `src/server/` (ex.: `src/features/verify/types.ts`).
+- Fetch para URL de fora (arquivo_url, webhook) só por `src/server/files/fetch-remote.ts` (SSRF). Nos testes, `setRemoteFetchTestMode(true)` libera loopback, http e certificado autoassinado (`tests/https-server.ts`); o banco só aceita webhook `https://`.
 - Quando o agente errar a mesma coisa duas vezes, a correção entra aqui.
