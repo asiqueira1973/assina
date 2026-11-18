@@ -37,7 +37,7 @@ Se o Postgres local travar ou cancelar por timeout (`57014`), confira se outro S
 npm run verify   # typecheck, lint, guardrails, pgTAP, Vitest, build e npm audit
 ```
 
-Saída saudável: `27 de 27 casos ok` (guardrails), `Result: PASS` (pgTAP), `Tests N passed` (Vitest), a tabela de rotas do `next build` e `found 0 vulnerabilities`.
+Saída saudável: `29 de 29 casos ok` (guardrails), `Result: PASS` (pgTAP), `Tests N passed` (Vitest), a tabela de rotas do `next build` e `found 0 vulnerabilities`.
 
 Outros comandos: `npm run db:types` (tipos do banco a partir do local) e `npm run db:schema` (regenera `supabase/schema.sql`).
 

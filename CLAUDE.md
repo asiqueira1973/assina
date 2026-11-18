@@ -19,7 +19,7 @@ Bug: teste que reproduz → ver falhar → commit → `touch .claude/fix-mode` �
 - Painel, API REST e MCP chamam `src/server/envelopes/` (princípio 5). Arquivo só por `src/server/files/storage.ts` (Cloudflare R2).
 
 ## Comandos
-- `npm run verify` — typecheck, lint, `test` (guardrails 27/27 + pgTAP + Vitest), build e `npm audit`. Saída saudável: `27 de 27 casos ok`, `Result: PASS`, `Tests N passed`, tabela de rotas do `next build`, `found 0 vulnerabilities`, código 0.
+- `npm run verify` — typecheck, lint, `test` (guardrails 29/29 + pgTAP + Vitest), build e `npm audit`. Saída saudável: `29 de 29 casos ok`, `Result: PASS`, `Tests N passed`, tabela de rotas do `next build`, `found 0 vulnerabilities`, código 0.
 - `npm run dev` em `http://localhost:3030` · `supabase start` (portas 555xx) · `npm run db:types` · `npm run db:schema`.
 
 ## Pegadinhas

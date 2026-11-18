@@ -1596,7 +1596,8 @@ case "$path" in
   *) exit 0 ;;
 esac
 # Linhas dentro do bloco LEGAL_NEGATIVAS (textos que explicam o que o Assina NÃO é) ficam de fora.
-filtered=$(echo "$content" | awk '/LEGAL_NEGATIVAS/{skip=1} skip&&/^\}/{skip=0;next} !skip')
+# Só a declaração abre o bloco: um comentário ou uma referência ao nome não isenta nada.
+filtered=$(echo "$content" | awk '/^export const LEGAL_NEGATIVAS/{skip=1} skip&&/^\}/{skip=0;next} !skip')
 if echo "$filtered" | grep -qiE 'certificado digital|icp-brasil|assinatura qualificada|assinatura digital|firma reconhecida|100% v(a|á)lid|validade garantida'; then
   echo "Bloqueado: copy promete o que o Assina não é (princípio 4, seção 15.3). Use a base legal da seção 20.1 (art. 10, § 2º, MP 2.200-2/2001). Se o texto explica o que o Assina NÃO é, coloque-o em LEGAL_NEGATIVAS no copy.ts." >&2
   exit 2
