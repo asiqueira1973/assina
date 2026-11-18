@@ -56,6 +56,8 @@ caso "certificado digital no copy.ts" guard-copy.sh 2 "$P/src/lib/copy.ts" 'expo
 caso "ICP-Brasil numa página" guard-copy.sh 2 "$P/src/app/page.tsx" '<p>Válido como ICP-Brasil</p>'
 caso "100% válido em e-mail" guard-copy.sh 2 "$P/src/server/email/convite.tsx" 'Assinatura 100% válida'
 caso "negativa dentro de LEGAL_NEGATIVAS (permitido)" guard-copy.sh 0 "$P/src/lib/copy.ts" $'export const LEGAL_NEGATIVAS = {\n  aviso: "Para escrituras e atos que exigem certificado ICP-Brasil, use um cartório."\n} as const;'
+caso "comentário que cita LEGAL_NEGATIVAS não isenta o resto do arquivo" guard-copy.sh 2 "$P/src/lib/copy.ts" $'// negativas vão em LEGAL_NEGATIVAS\nexport const copy = {\n  x: "Assine com certificado digital",\n} as const;'
+caso "texto proibido depois do bloco LEGAL_NEGATIVAS" guard-copy.sh 2 "$P/src/lib/copy.ts" $'export const LEGAL_NEGATIVAS = {\n  a: "Não é ICP-Brasil."\n} as const;\nexport const copy = {\n  x: "Assinatura digital garantida",\n} as const;'
 caso "copy comum (permitido)" guard-copy.sh 0 "$P/src/lib/copy.ts" 'export const copy = { titulo: "Mande documentos para assinar." }'
 
 # --- guard-migrations e guard-tests precisam de um repositório git próprio ---
