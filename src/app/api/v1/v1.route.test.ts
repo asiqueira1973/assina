@@ -246,6 +246,8 @@ describe("OpenAPI (critério 8.9)", () => {
     expect(result.errors ?? []).toEqual([]);
     expect(result.valid).toBe(true);
     expect(doc.openapi).toBe("3.1.0");
+    // Nenhum "${…}" impresso literalmente (texto que devia vir de limits.ts).
+    expect(JSON.stringify(doc)).not.toContain("${");
     expect(Object.keys(doc.paths).sort()).toEqual([
       "/envelopes",
       "/envelopes/{id}",

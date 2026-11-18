@@ -9,7 +9,7 @@ Se um teste falhar, corrija o código, não o teste; nunca pule nem apague teste
 Bug: teste que reproduz → ver falhar → commit → `touch .claude/fix-mode` → corrigir → `rm .claude/fix-mode`.
 
 ## Estado
-Épicos 8.0 a 8.9 (rascunho, upload, editor de campos, envio, assinatura, finalização com manifesto e selo, painel, verificação pública, API REST e webhooks) concluídos. Migrations aplicadas só no **local**; pendências do Alexandre em `PENDENCIAS.md`. Próximo: 8.10 (MCP e OAuth). E-mail em dev vai para `.caixa-de-saida-local/`.
+Épicos 8.0 a 8.10 (rascunho, upload, editor de campos, envio, assinatura, finalização com manifesto e selo, painel, verificação pública, API REST, webhooks, MCP e OAuth) concluídos. Migrations aplicadas só no **local**; pendências do Alexandre em `PENDENCIAS.md`. Próximo: 8.11 (analytics no Visão do Produto). E-mail em dev vai para `.caixa-de-saida-local/`.
 
 ## Convenções (seção 18)
 - Banco em português `snake_case`, **sempre com prefixo `as_`** (projeto Supabase compartilhado `jeesdmfcrmhyufwzwzwt`). Código, variáveis e arquivos em inglês; fronteira em `src/server/db/`.

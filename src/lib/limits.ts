@@ -115,3 +115,14 @@ export const WEBHOOK_TENTATIVAS = 6; // regra 11.17: a imediata + uma por faxina
 export const WEBHOOK_URL_MAX = 500; // coluna as_contas.webhook_url
 export const WEBHOOK_RESPOSTA_MAX = 64 * 1024; // lê no máximo isso da resposta do webhook
 export const ROTULO_MAX = 60; // as_campos.rotulo (dica do campo)
+
+// MCP e OAuth (épico 8.10, seções 6.4 e 13.3).
+export const OAUTH_CODIGO_SEGUNDOS = 10 * 60; // 6.4, passo 4: código vale 10 min
+export const OAUTH_REDIRECT_URIS_MAX = 5; // as_oauth_clientes.redirect_uris de 1 a 5
+export const OAUTH_REDIRECT_URI_MAX = 500;
+export const OAUTH_CLIENTE_NOME_MAX = 100;
+export const MCP_LISTA_PADRAO = 20; // 13.3: listar_envelopes
+export const MCP_LISTA_MAX = 50; // 13.3
+export const MCP_EVENTOS_DETALHE = 20; // 13.3: ver_envelope mostra os últimos 20 eventos
+export const PKCE_VERIFIER_MIN = 43; // RFC 7636
+export const PKCE_VERIFIER_MAX = 128; // RFC 7636

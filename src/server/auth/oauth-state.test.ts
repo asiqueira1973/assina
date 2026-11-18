@@ -8,6 +8,11 @@ describe("rota de volta do login (seção 6.1)", () => {
     ["/painel/conta", "/painel/conta"],
     ["/painel/envelopes/123?aba=trilha", "/painel/envelopes/123?aba=trilha"],
     ["/oauth/autorizar?client_id=abc&state=x", "/oauth/autorizar?client_id=abc&state=x"],
+    // O pedido real do MCP, montado pelo URLSearchParams (redirect codificado; "*" fica como está).
+    [
+      `/oauth/autorizar?${new URLSearchParams({ response_type: "code", client_id: "84e0420f-7e6c-4626-b1b5-ee7d311ac220", redirect_uri: "https://claude.ai/api/mcp/auth_callback", code_challenge: "zZSO1CkoLYzVM0rv00Z0yn93dZLEJVyV1fG13zeSPf4", code_challenge_method: "S256", state: "a*b c/d" })}`,
+      `/oauth/autorizar?${new URLSearchParams({ response_type: "code", client_id: "84e0420f-7e6c-4626-b1b5-ee7d311ac220", redirect_uri: "https://claude.ai/api/mcp/auth_callback", code_challenge: "zZSO1CkoLYzVM0rv00Z0yn93dZLEJVyV1fG13zeSPf4", code_challenge_method: "S256", state: "a*b c/d" })}`,
+    ],
   ])("aceita %s", (input, expected) => {
     expect(safeReturnPath(input)).toBe(expected);
   });

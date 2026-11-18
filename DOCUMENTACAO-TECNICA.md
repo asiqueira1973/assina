@@ -4,7 +4,7 @@ Descreve o sistema **como está implementado**, não como foi planejado (spec.md
 
 | | |
 |---|---|
-| Estado | Épicos 8.0 a 8.9 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
+| Estado | Épicos 8.0 a 8.10 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
 | Stack | Next.js 16.4.6 (App Router, Cache Components, `proxy.ts`), React 19.3, TypeScript, Supabase Postgres (projeto compartilhado, prefixo `as_`), Vitest, pgTAP |
 
 ---
@@ -97,6 +97,7 @@ Fonte: `supabase/migrations/20261117130100_as_logica.sql`. Toda função com `se
 | `as_fn_troca_chave_api` | função | credenciais | Integrações | revoga e grava numa transação |
 | `as_tg_webhook_assinou` | trigger | signatários → entregas | assinar | `signatario.assinou` na mesma transação |
 | `as_fn_reserva_entrega` | função | entregas | webhooks | um envio por vez, até 6 tentativas |
+| `as_fn_cria_codigo_oauth` · `as_fn_troca_codigo_oauth` | funções | códigos OAuth, credenciais | OAuth do MCP | código com redirect exato e PKCE; troca transacional pelo token `mcp` |
 | `as_fn_conclui_envelope` | função | envelope, trilha, notificações, webhooks | finalizar | `finalizando → concluido` com hash, selo e caminho; eventos `finalizado` e `concluido`; e-mails de conclusão e webhook na mesma transação |
 | `as_fn_falha_finalizacao` | função | envelope, notificações | finalizar | registra a falha só da própria reserva; na 3ª tentativa (ou na `integridade_violada`), alerta ao admin |
 | `as_tg_final_imutavel` | trigger | `as_envelopes` | — | o resultado da finalização não se reescreve |
@@ -136,6 +137,10 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | `/api/v1/*` (API REST) | as do domínio | as do domínio, com origem e ator `api` | `requireCredential` (só chave de API) → `apiRoute` → as funções de `src/server/envelopes/` |
 | `/painel/integracoes` e `POST /api/painel/integracoes/{chave,revelar,webhook,webhook/teste}` | `as_credenciais`, `as_contas` | `as_credenciais` (troca), `as_contas` (webhook) | `integrationsView`, `rotateApiKey`, `revealSecret`, `saveWebhookUrl`, `sendTestWebhook` |
 | `/docs/api` (público) e `GET /api/v1/openapi.json` | — | — | `openApiDocument` |
+| `/.well-known/oauth-*`, `POST /oauth/registrar`, `POST /oauth/token` | `as_oauth_clientes`, `as_oauth_codigos` | clientes, códigos, credenciais `mcp` | `src/server/oauth/server.ts` |
+| `/oauth/autorizar` (consentimento) e `POST /oauth/autorizar/decidir` | cliente, conta da sessão | `as_oauth_codigos` | `checkAuthorizeParams`, `createAuthorizationCode` |
+| `/mcp` (POST/GET/DELETE) | as do domínio | as do domínio, com origem e ator `mcp` | `requireCredential(["api","mcp"])` → `buildMcpServer` (`src/server/mcp/tools.ts`) → `WebStandardStreamableHTTPServerTransport` |
+| `POST /api/painel/integracoes/conexoes/{id}/revogar` | `as_credenciais` | `as_credenciais.revogada_em` | `revokeMcpConnection` |
 | `POST /api/painel/envelopes/{id}/signatarios/{sid}/convite` | `as_signatarios`, `as_notificacoes` | `as_signatarios` (token), `as_notificacoes`, `as_eventos` | `requireConta`, `sendInvite` |
 | `/painel` e `/painel/conta` (uso do nível) | `as_envelopes` (contagem) | — | `getUsage` |
 | `/assinar/{token}` (signatário) | `as_signatarios`, `as_envelopes`, `as_contas`, `as_campos` | via as rotas abaixo | `loadSignerByToken`, `signerPageState` |
@@ -167,6 +172,20 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
   - "Recusar" chama `decline` (`as_fn_recusa`) e manda os avisos;
   - "visualizou" sai quando a primeira página aparece, uma vez por sessão (pelo `jti`).
 - **Avisos por e-mail:** `src/server/notifications/notices.ts` manda `assinou_remetente`, `recusado_remetente` e `recusado_destinatario` com a mesma reserva do convite; `retryFailedNotices` é a parte da faxina (rota no 8.13).
+- **MCP e OAuth (épico 8.10):**
+  - **OAuth 2.1** (`src/server/oauth/`), mesmo desenho do Visão de Produto:
+    - metadados com as URLs de `NEXT_PUBLIC_SITE_URL` (o do recurso também em `/…/mcp`);
+    - registro de cliente público (redirect https, ou http em localhost/127.0.0.1);
+    - consentimento com sessão: sem ela, vai para `/entrar?volta=` e volta;
+    - a decisão por formulário, com Origin conferido;
+    - código de 10 min com PKCE S256;
+    - troca transacional pelo token `assina_mcp_…`, só em hash, sem prazo e sem refresh token.
+  - **Erros do fluxo:** nenhum erro de `/oauth/autorizar` redireciona; tudo vai para a tela de erro (divergência 49). Código reutilizado revoga o token que gerou (divergência 51).
+  - **/mcp:** SDK oficial 1.32.2, com `WebStandardStreamableHTTPServerTransport`, sem sessão e com resposta JSON; um servidor por requisição, preso à conta da credencial.
+    - Sem credencial: 401 com `WWW-Authenticate: Bearer resource_metadata=…`, exposto pelo CORS.
+    - As ferramentas chamam as funções do domínio com ator `mcp`. `criar_envelope` reaproveita a criação da API sem campos e sempre diz que não enviou.
+    - Erro de negócio volta como `isError` com a mensagem de `copy.api.errors`.
+  - **Integrações:** "Pelo aplicativo" (o endereço), "Por arquivo" (o JSON com a chave de API) e as conexões (nome, criada em, último uso) com "Revogar".
 - **API REST v1 (épico 8.9):**
   - Toda rota passa por `apiRoute` (`src/server/api/v1.ts`): Bearer → hash → credencial `api` ativa → conta não suspensa (`src/server/auth/api-credential.ts`), e os erros no formato `{codigo, mensagem}` da 13.2.
   - As rotas chamam as mesmas funções do painel (princípio 5), com origem e ator `api`.
@@ -253,4 +272,12 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | 41 | Códigos e status além da lista da 13.2: `lembrete_recente` (429), `limite_lembretes` e `prazo_encerrado` (409), `email_falhou` (502) e o `motivo` `arquivo_ausente` | Vêm das ações do painel que a API reaproveita (8.5 e 8.7) e que a 13.2 não previa; todos com `{codigo, mensagem}` |
 | 42 | Repetir uma `Idempotency-Key` de rascunho ainda sem arquivo devolve uma `upload_url` nova | A resposta do 1º pedido pode ter se perdido; sem isso, o cliente ficaria sem como subir o PDF (achado do verifier) |
 | 43 | Textos de descrição do OpenAPI ficam em `src/server/api/openapi.ts`, não em `copy.ts` | São o contrato da API para quem integra, versionado junto com as rotas; os limites vêm de `limits.ts` |
-| 44 | Migrations ainda não aplicadas no remoto | O hook `guard-production.sh` da sessão em que o épico foi feito (pasta do agenda-psi) bloqueou o `apply_migration`; aguardando o Alexandre |
+| 44 | SDK do MCP na versão estável 1.32.2 (transporte web padrão), e não a linha 2.x usada no Visão de Produto | A 1.x tem o transporte Request→Response que a rota do Next precisa e não é beta |
+| 45 | A decisão do consentimento vai por `POST /oauth/autorizar/decidir` (spec v0.13) | No App Router, a página e a rota não moram no mesmo segmento; a rota confere tudo de novo e exige sessão e Origin |
+| 46 | Metadados do recurso também em `/.well-known/oauth-protected-resource/mcp` | Alguns clientes pedem a forma com o caminho do recurso (RFC 9728) antes da raiz |
+| 47 | `listar_envelopes` busca pela lista do painel (até 500 por grupo de status) e filtra o status exato | Reaproveita a busca escapada e o "n de m"; o limite cobre o volume do MVP (11.13) |
+| 48 | Roteiro do Claude e do ChatGPT no README sem prints | Sem deploy, os aplicativos não alcançam o `/mcp` (PENDENCIAS P9) |
+| 49 | Nenhum erro de `/oauth/autorizar` redireciona para o cliente: pedido inválido mostra a tela "Este pedido de conexão não é válido."; só "Permitir" e "Cancelar", com sessão, voltam | Qualquer um registra um cliente com o redirect que quiser; redirecionar pedido malformado sem sessão nem clique tornaria o domínio um redirecionador aberto (RFC 9700 §4.11.2, achado do verifier) |
+| 50 | Consentimento mostra também "Depois, você volta para {host}." | O nome do cliente é autodeclarado (um cliente pode se chamar "Claude"); o host de volta não mente |
+| 51 | Código reutilizado revoga o token emitido com ele; a troca não lança exceção, devolve nulo (coluna `as_oauth_codigos.credencial_id`) | RFC 9700: reuso indica vazamento. Uma exceção desfaria a revogação na mesma transação |
+| 52 | Migrations ainda não aplicadas no remoto | O hook `guard-production.sh` da sessão em que o épico foi feito (pasta do agenda-psi) bloqueou o `apply_migration`; aguardando o Alexandre |

@@ -214,14 +214,14 @@ isOneToOne: false
                   ]
                 },"as_oauth_codigos": {
                   Row: {
-                    "cliente_id": string,"code_challenge": string,"codigo_hash": string,"conta_id": string,"expira_em": string,"redirect_uri": string,"usado_em": string | null
+                    "cliente_id": string,"code_challenge": string,"codigo_hash": string,"conta_id": string,"credencial_id": string | null,"expira_em": string,"redirect_uri": string,"usado_em": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "cliente_id": string,"code_challenge": string,"codigo_hash": string,"conta_id": string,"expira_em": string,"redirect_uri": string,"usado_em"?: string | null
+                    "cliente_id": string,"code_challenge": string,"codigo_hash": string,"conta_id": string,"credencial_id"?: string | null,"expira_em": string,"redirect_uri": string,"usado_em"?: string | null
                   }
                   Update: {
-                    "cliente_id"?: string,"code_challenge"?: string,"codigo_hash"?: string,"conta_id"?: string,"expira_em"?: string,"redirect_uri"?: string,"usado_em"?: string | null
+                    "cliente_id"?: string,"code_challenge"?: string,"codigo_hash"?: string,"conta_id"?: string,"credencial_id"?: string | null,"expira_em"?: string,"redirect_uri"?: string,"usado_em"?: string | null
                   }
                   Relationships: [
                     {
@@ -235,6 +235,12 @@ isOneToOne: false
       columns: ["conta_id"]
 isOneToOne: false
       referencedRelation: "as_contas"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "as_oauth_codigos_credencial_id_fkey"
+      columns: ["credencial_id"]
+isOneToOne: false
+      referencedRelation: "as_credenciais"
       referencedColumns: ["id"]
     }
                   ]
@@ -335,6 +341,9 @@ isOneToOne: false
                            },
 "as_fn_copia_link":
 { Args: { "p_ator": Database["public"]['Enums']["as_ator"],"p_conta_id": string,"p_envelope_id": string,"p_ip"?: unknown,"p_signatario_id": string,"p_token_hash": string,"p_user_agent"?: string }; Returns: undefined
+                           },
+"as_fn_cria_codigo_oauth":
+{ Args: { "p_cliente_id": string,"p_code_challenge": string,"p_codigo_hash": string,"p_conta_id": string,"p_redirect_uri": string,"p_validade_s": number }; Returns: undefined
                            },
 "as_fn_cria_rascunho":
 { Args: { "p_ator": Database["public"]['Enums']["as_ator"],"p_codigo_verificacao": string,"p_conta_id": string,"p_ip"?: unknown,"p_origem": Database["public"]['Enums']["as_origem"],"p_titulo": string,"p_user_agent"?: string }; Returns: {
@@ -593,6 +602,9 @@ isOneToOne: false
                            },
 "as_fn_troca_chave_api":
 { Args: { "p_cifrado": string,"p_conta_id": string,"p_hash": string,"p_prefixo": string }; Returns: undefined
+                           },
+"as_fn_troca_codigo_oauth":
+{ Args: { "p_challenge_do_verifier": string,"p_cliente_id": string,"p_codigo_hash": string,"p_redirect_uri": string,"p_token_hash": string,"p_token_prefixo": string }; Returns: string
                            },
 "as_fn_valida_codigo":
 { Args: { "p_codigo_hash": string,"p_ip"?: unknown,"p_max_tentativas": number,"p_signatario_id": string,"p_user_agent"?: string }; Returns: {

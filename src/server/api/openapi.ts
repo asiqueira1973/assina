@@ -181,7 +181,7 @@ export function openApiDocument() {
           tags: ["Envelopes"],
           operationId: "enviarEnvelope",
           summary: "Envia para assinatura",
-          description: "Congela o rascunho e manda os convites. Limites: ${LIMITE_ENVIOS_24H} envios em 24 h e o limite de documentos do nível da conta (`429` com `limite` e `usados`).",
+          description: "Congela o rascunho e manda os convites. Limites: " + LIMITE_ENVIOS_24H + " envios em 24 h e o limite de documentos do nível da conta (`429` com `limite` e `usados`).",
           responses: { 200: { description: "Enviado", content: json({ type: "object", properties: { envelope: { $ref: "#/components/schemas/Envelope" } } }) }, 400: E[400], 401: E[401], 404: E[404], 409: E[409], 429: E[429] },
         },
       },

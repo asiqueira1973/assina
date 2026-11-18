@@ -13,3 +13,8 @@
 .ok { margin: 0; font-size: 14px; color: var(--text-secondary); }
 .error { margin: 0; font-size: 14px; color: var(--red); }
 .confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px; border-radius: 12px; background: color-mix(in srgb, var(--orange) 14%, transparent); font-size: 15px; }
+.list { list-style: none; margin: 0; padding: 0; }
+.item { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 10px 0; }
+.item + .item { border-top: 1px solid var(--hairline); }
+.itemName { margin: 0; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+pre.value { margin: 0; white-space: pre-wrap; }

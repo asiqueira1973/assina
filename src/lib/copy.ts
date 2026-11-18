@@ -2,6 +2,21 @@
 // Cada épico acrescenta o seu bloco. Palavras proibidas (princípio 4) ficam fora daqui; textos que
 // explicam o que o Assina NÃO é vão em LEGAL_NEGATIVAS, o único bloco que o guard-copy ignora.
 
+import {
+  DOWNLOAD_URL_SEGUNDOS,
+  LEMBRETE_MANUAL_INTERVALO_H,
+  LIMITE_ARQUIVO_BYTES,
+  MAX_PAGINAS,
+  MCP_EVENTOS_DETALHE,
+  MCP_LISTA_MAX,
+  MCP_LISTA_PADRAO,
+  PKCE_VERIFIER_MAX,
+  PKCE_VERIFIER_MIN,
+  PRAZO_DIAS_MAX,
+  PRAZO_DIAS_MIN,
+  PRAZO_DIAS_PADRAO,
+} from "./limits";
+
 export const copy = {
   appName: "Assina",
   login: {
@@ -247,6 +262,87 @@ export const copy = {
     secret: "Segredo do webhook",
     secretHelp: "Confira o cabeçalho Assina-Assinatura com este segredo.",
     docs: "Documentação da API",
+  },
+  // Seção 15.1, "Autorizar conexão" (épico 8.10; textos extras na v0.13).
+  oauth: {
+    title: (cliente: string) => `${cliente} quer acessar seu Assina.`,
+    can: "Vai poder: ver seus envelopes, criar rascunhos, enviar, lembrar e cancelar envelopes.",
+    cannot: "Não vai poder: excluir envelopes nem ver sua chave de API.",
+    allow: "Permitir",
+    cancel: "Cancelar",
+    as: (email: string) => `Você está conectando a conta ${email}.`,
+    returnTo: (host: string) => `Depois, você volta para ${host}.`,
+    invalidTitle: "Este pedido de conexão não é válido.",
+    invalidText: "Volte ao aplicativo e tente conectar de novo.",
+  },
+  // Ferramentas do MCP (seção 13.3, épico 8.10): títulos, descrições (lidas pelo assistente) e
+  // as respostas em texto. Os dados também vão em structuredContent.
+  mcpTools: {
+    listar: { title: "Listar envelopes", description: "Lista os envelopes da conta, mais recentes primeiro, com título, situação, quantos já assinaram, datas e id. Filtre por status (\"pendentes\" = aguardando assinatura) ou busque por título ou e-mail de destinatário." },
+    ver: { title: "Ver envelope", description: `Mostra um envelope: situação de cada destinatário, prazo, link do painel e os últimos ${MCP_EVENTOS_DETALHE} eventos da trilha de auditoria.` },
+    criar: { title: "Criar envelope (rascunho)", description: "Cria um envelope em rascunho. Nunca envia. Com arquivo_url (PDF em https), o arquivo é baixado e conferido; sem ele, devolve o link para a pessoa anexar o PDF no painel. Para enviar, use enviar_envelope depois de confirmar com a pessoa." },
+    enviar: { title: "Enviar envelope", description: "Envia um rascunho para assinatura: os destinatários recebem o convite por e-mail e o documento não pode mais ser alterado. Antes de chamar, confirme com a pessoa o título e quem vai assinar." },
+    lembrar: { title: "Lembrar signatários", description: `Manda um lembrete por e-mail a quem ainda não assinou (ou só ao e-mail informado). No máximo um lembrete a cada ${LEMBRETE_MANUAL_INTERVALO_H} horas por pessoa.` },
+    cancelar: { title: "Cancelar envelope", description: "Cancela um envelope enviado. Quem ainda não assinou não vai mais conseguir. Não dá para desfazer: confirme com a pessoa antes." },
+    link: { title: "Link do documento", description: `Gera um link de ${DOWNLOAD_URL_SEGUNDOS / 60} minutos para baixar o PDF original ou o assinado (versao "final", só depois de concluído).` },
+    args: {
+      status: "status do envelope, ou \"pendentes\" para os que aguardam assinatura",
+      busca: "trecho do título ou do e-mail de um destinatário",
+      limite: `quantos trazer (padrão ${MCP_LISTA_PADRAO}, máximo ${MCP_LISTA_MAX})`,
+      id: "id do envelope",
+      titulo: "título do envelope",
+      signatarios: "quem recebe: nome, e-mail, papel (assinar ou copia), ordem e se pede CPF",
+      arquivo_url: `endereço https do PDF (até ${LIMITE_ARQUIVO_BYTES / 1024 / 1024} MB e ${MAX_PAGINAS} páginas)`,
+      mensagem: "mensagem que vai no convite",
+      em_ordem: "assinar um de cada vez, na ordem",
+      prazo_dias: `dias para assinar (${PRAZO_DIAS_MIN} a ${PRAZO_DIAS_MAX}, padrão ${PRAZO_DIAS_PADRAO})`,
+      email: "e-mail de um destinatário (sem ele, lembra todos os que estão aguardando)",
+      motivo: "motivo do cancelamento, avisado a quem já foi convidado",
+      versao: "original ou final (o assinado)",
+    },
+    none: "Nenhum envelope encontrado.",
+    line: (titulo: string, status: string, progresso: string, data: string, id: string) => `• ${titulo} — ${status} — ${progresso} — ${data} — id ${id}`,
+    progress: (n: number, m: number) => `${n} de ${m} assinaram`,
+    sent: (data: string) => `enviado em ${data}`,
+    created: (data: string) => `criado em ${data}`,
+    deadline: (data: string) => `Prazo: ${data}.`,
+    panel: (url: string) => `Painel: ${url}`,
+    recipients: "Destinatários:",
+    trail: "Últimos eventos:",
+    draftCreated: (titulo: string, id: string) => `Rascunho criado: ${titulo} (id ${id}).`,
+    attachFile: (url: string) => `Falta o PDF: a pessoa anexa aqui, e posiciona os campos se quiser: ${url}`,
+    fileAttached: (paginas: number) => `PDF anexado e conferido (${paginas} ${paginas === 1 ? "página" : "páginas"}).`,
+    notSent: "O envelope não foi enviado. Para enviar, use enviar_envelope depois de confirmar com a pessoa.",
+    sentNow: (titulo: string, n: number) => `Enviado: ${titulo}. ${n === 1 ? "1 convite saiu" : `${n} convites saíram`} por e-mail.`,
+    reminded: (n: number) => (n === 0 ? "Ninguém recebeu lembrete agora (todos já receberam um nas últimas 24 horas, ou não há quem esteja aguardando)." : n === 1 ? "Lembrete enviado para 1 pessoa." : `Lembrete enviado para ${n} pessoas.`),
+    canceled: (titulo: string) => `Cancelado: ${titulo}. Quem já tinha sido convidado foi avisado.`,
+    linkText: (url: string) => `Link válido por ${DOWNLOAD_URL_SEGUNDOS / 60} minutos: ${url}`,
+    notFoundEmail: "Esse e-mail não é de um destinatário que está aguardando neste envelope.",
+  },
+  // Erros do OAuth (error_description): para quem integra (épico 8.10).
+  oauthErrors: {
+    registerBody: "Informe de 1 a 5 redirect_uris e, opcionalmente, client_name.",
+    registerUri: "Cada redirect_uri precisa ser https, ou http em localhost ou 127.0.0.1.",
+    grantType: "Só authorization_code.",
+    missing: `Faltam code, code_verifier (${PKCE_VERIFIER_MIN} a ${PKCE_VERIFIER_MAX} caracteres), client_id ou redirect_uri.`,
+    client: "Cliente desconhecido.",
+    grant: "Código inválido, usado, vencido, de outro cliente ou com PKCE que não confere.",
+    server: "Não consegui concluir a autorização. Tente de novo.",
+  },
+  // Integrações, parte do MCP (seção 15.1, épico 8.10).
+  mcp: {
+    title: "Conectar ao Claude ou ao ChatGPT",
+    byApp: "Pelo aplicativo",
+    byAppText: "No Claude (Configurações › Conectores › Adicionar conector personalizado) ou no ChatGPT (modo desenvolvedor › Conectores), cole este endereço. O aplicativo abre o Assina para você permitir a conexão.",
+    byFile: "Por arquivo",
+    byFileText: "Para o Claude Code ou o Claude Desktop configurados por arquivo, use a chave de API acima no lugar de assina_…:",
+    connections: "Conexões autorizadas",
+    none: "Nenhuma conexão ainda.",
+    createdAt: (data: string) => `Criada em ${data}`,
+    lastUse: (data: string) => `último uso em ${data}`,
+    neverUsed: "nunca usada",
+    revoke: "Revogar",
+    revoked: "Conexão revogada.",
   },
   // Documentação da API, /docs/api (épico 8.9; textos da v0.12).
   docs: {

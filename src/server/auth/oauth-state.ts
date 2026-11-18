@@ -11,7 +11,8 @@ export type OAuthCookie = { state: string; verifier: string; volta: string };
 
 // Rotas para onde o login pode voltar: só o painel e a autorização do MCP (6.4). Qualquer outra
 // coisa (inclusive URL de outro site) volta para /painel — impede redirecionamento aberto.
-const SAFE_RETURN = /^\/(painel|oauth\/autorizar)(\/[A-Za-z0-9\-._~/]*)?(\?[A-Za-z0-9\-._~%&=+]*)?$/;
+// O "*" entra porque o URLSearchParams não o codifica (um state com "*" perderia a volta).
+const SAFE_RETURN = /^\/(painel|oauth\/autorizar)(\/[A-Za-z0-9\-._~/]*)?(\?[A-Za-z0-9\-._~%&=+*]*)?$/;
 
 // Saneia a rota de volta. Recebe: valor do ?volta=. Devolve: rota segura.
 export function safeReturnPath(raw: string | null | undefined): string {

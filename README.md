@@ -149,6 +149,33 @@ createServer((req, res) => {
 }).listen(3000);
 ```
 
+## MCP: conectar ao Claude e ao ChatGPT (épico 8.10)
+
+O endereço do servidor MCP é `https://assina.app.br/mcp` (Streamable HTTP). Ele aceita dois tipos de credencial: o token do OAuth, que os aplicativos pegam sozinhos, e a chave de API, para clientes configurados por arquivo. A tela **Integrações** mostra os dois caminhos e a lista de conexões autorizadas, com "Revogar".
+
+**Claude (claude.ai e Claude Desktop), pelo aplicativo:**
+1. Configurações → **Conectores** → **Adicionar conector personalizado**.
+2. Nome `Assina`; URL `https://assina.app.br/mcp`; **Adicionar**.
+3. **Conectar**: abre o Assina. Entre com o Google, se pedir, e clique em **Permitir**.
+4. A conexão aparece em Integrações → "Conexões autorizadas", com o nome que o Claude registrou.
+
+**ChatGPT (modo desenvolvedor), pelo aplicativo:**
+1. Configurações → **Aplicativos e conectores** → **Configurações avançadas** → ligue o **Modo desenvolvedor**.
+2. **Criar** conector: nome `Assina`; URL `https://assina.app.br/mcp`; autenticação **OAuth**.
+3. Ao conectar, abre o Assina: **Permitir**.
+
+**Claude Code ou Claude Desktop por arquivo** (com a chave de API de Integrações):
+
+```json
+{ "mcpServers": { "assina": { "type": "http", "url": "https://assina.app.br/mcp", "headers": { "Authorization": "Bearer assina_…" } } } }
+```
+
+No Claude Code, o mesmo pode ser feito pela linha de comando: `claude mcp add --transport http assina https://assina.app.br/mcp --header "Authorization: Bearer assina_…"`.
+
+As ferramentas são `listar_envelopes`, `ver_envelope`, `criar_envelope` (só rascunho; nunca envia), `enviar_envelope` (o assistente confirma antes), `lembrar_signatarios`, `cancelar_envelope` e `link_do_documento`. O MCP não exclui envelope e não mexe na chave nem no webhook.
+
+Os prints de cada passo entram quando houver deploy (PENDENCIAS P9).
+
 ## Vercel Firewall (limites por IP)
 
 O app não conta requisições por IP: quem limita é o Vercel Firewall, configurado no painel da Vercel (projeto → **Firewall** → **Configure** → **New Rule**). Cada regra usa a condição **Request Path starts with**, a ação **Rate Limit** e a janela fixa de 60 s por IP. Acima do limite, a resposta é **429**.
@@ -158,6 +185,7 @@ O app não conta requisições por IP: quem limita é o Vercel Firewall, configu
 | `/api/verificar` e `/verificar/` | 30 por minuto | critério 8.8: a consulta é pública (a página do código também consulta o banco) |
 | `/api/assinar/` | 20 por minuto | página do signatário (código por e-mail) |
 | `/api/v1/` e `/mcp` | 120 por minuto | integrações (épicos 8.9 e 8.10) |
+| `/oauth/` | 30 por minuto | registro de cliente e troca de código (épico 8.10) |
 
 Para conferir depois de criar, rode `for i in $(seq 1 35); do curl -s -o /dev/null -w "%{http_code} " "https://assina.app.br/api/verificar?codigo=AAAAAAAAAAAA"; done`: as primeiras 30 respostas são 200 e as seguintes, 429.
 
