@@ -176,6 +176,18 @@ As ferramentas são `listar_envelopes`, `ver_envelope`, `criar_envelope` (só ra
 
 Os prints de cada passo entram quando houver deploy (PENDENCIAS P9).
 
+## Analytics no Visão do Produto (épico 8.11)
+
+Os eventos da seção 21 do spec (`assina_*`) saem do servidor para o Visão do Produto, sem segurar a resposta: timeout de 4 s, e qualquer falha só fica no log como `analytics_falhou`. Nenhuma propriedade leva título, nome, e-mail, CPF, mensagem, motivo, IP, valor de campo ou nome de arquivo.
+
+1. No Visão do Produto, crie o projeto **Assina** com o prefixo `assina_` e copie a chave de ingestão.
+2. Na Vercel (e no `.env.local`, se quiser ver os eventos de dev), defina:
+   - `VISAO_INGEST_URL`: o endereço `…/functions/v1/ingest` do Visão;
+   - `VISAO_API_KEY`: a chave copiada.
+
+   Sem as duas, nada é enviado.
+3. Faça um envelope de teste ponta a ponta e confira em **Atividade**: `assina_envelope_criado`, `assina_envelope_enviado`, `assina_documento_assinado` e `assina_envelope_concluido`.
+
 ## Vercel Firewall (limites por IP)
 
 O app não conta requisições por IP: quem limita é o Vercel Firewall, configurado no painel da Vercel (projeto → **Firewall** → **Configure** → **New Rule**). Cada regra usa a condição **Request Path starts with**, a ação **Rate Limit** e a janela fixa de 60 s por IP. Acima do limite, a resposta é **429**.

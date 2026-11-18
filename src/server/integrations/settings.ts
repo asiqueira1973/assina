@@ -2,6 +2,7 @@
 // pedido, gerar nova) e webhook (URL, segredo, teste). Os valores em claro só saem por pedido
 // explícito (rota sem cache), nunca no HTML da página. Sempre filtrado pela conta da sessão.
 import "server-only";
+import { track } from "@/server/analytics/client";
 import { generateApiKey } from "@/server/credentials/api-key";
 import { decryptSecret, encryptSecret } from "@/server/crypto/aes";
 import { db } from "@/server/db/client";
@@ -38,6 +39,7 @@ export async function rotateApiKey(contaId: string): Promise<string> {
   const key = generateApiKey();
   const { error } = await db().rpc("as_fn_troca_chave_api", { p_conta_id: contaId, p_hash: key.hash, p_prefixo: key.prefix, p_cifrado: key.sealed });
   if (error) throw error;
+  track("assina_chave_api_gerada", { quem: { conta: contaId }, propriedades: {} });
   return key.value;
 }
 
@@ -57,6 +59,7 @@ export async function saveWebhookUrl(contaId: string, url: string | null): Promi
     .update({ webhook_url: url, webhook_segredo_cifrado: conta?.webhook_segredo_cifrado ?? encryptSecret(generateWebhookSecret()) })
     .eq("id", contaId);
   if (error) throw error;
+  track("assina_webhook_configurado", { quem: { conta: contaId }, propriedades: {} });
   return "ok";
 }
 

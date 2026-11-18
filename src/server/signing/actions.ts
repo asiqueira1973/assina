@@ -20,6 +20,7 @@ import {
   TEXTO_CAMPO_MAX,
 } from "@/lib/limits";
 import { maskEmail } from "@/lib/mask";
+import { track } from "@/server/analytics/client";
 import { hashCredential } from "@/server/credentials/api-key";
 import { db } from "@/server/db/client";
 import { mailer } from "@/server/email/mailer";
@@ -98,6 +99,8 @@ export async function validateCode(ctx: SignerContext, code: string, meta: Reque
   if (error) throw error;
   const r = data as { resultado: string; restantes: number };
   if (r.resultado !== "ok") throw new SignerError(r.resultado, r.resultado === "errado" ? { restantes: r.restantes } : {});
+  // Tentativas: as erradas deste código (lidas antes de validar) mais a certa.
+  track("assina_codigo_validado", { quem: { signatario: ctx.signer.id }, propriedades: { tentativas: ctx.signer.codigo_tentativas + 1 } });
 }
 
 // Registra "visualizou" uma vez por sessão (critério 8.5): procura um evento com o jti da sessão.
@@ -121,6 +124,7 @@ export async function recordView(ctx: SignerContext, jti: string, meta: RequestM
     p_dados: { sessao: jti },
   });
   if (error) throw error;
+  track("assina_documento_aberto", { quem: { signatario: ctx.signer.id }, chave: `${ctx.signer.id}:${jti}`, propriedades: { ordem: ctx.signer.ordem } });
   return true;
 }
 
@@ -199,6 +203,11 @@ export async function sign(ctx: SignerContext, input: z.infer<typeof SignInput>,
     throw error;
   }
   const result = data as { envelope_status: string; proximo_id: string | null };
+  track("assina_documento_assinado", {
+    quem: { signatario: ctx.signer.id },
+    chave: ctx.signer.id,
+    propriedades: () => signedProperties(ctx, input.metodo),
+  });
 
   // Depois do commit: convite do próximo (em ordem) e aviso ao remetente. Falha de e-mail não
   // desfaz a assinatura nem vira erro na tela; a faxina retenta (regra 11.16). A finalização é do 8.6.
@@ -230,12 +239,33 @@ export async function decline(ctx: SignerContext, motivo: string, meta: RequestM
     if (["link_invalido", "status_mudou", "prazo_encerrado", "motivo_invalido"].includes(error.message)) throw new SignerError(error.message);
     throw error;
   }
+  track("assina_documento_recusado", { quem: { signatario: ctx.signer.id }, chave: ctx.signer.id, propriedades: {} });
   await afterCommit(async () => {
     await sendNotice(`recusado_remetente:${ctx.envelope.id}`);
     const { data: others } = await db().from("as_notificacoes").select("chave").eq("envelope_id", ctx.envelope.id).eq("tipo", "recusado_destinatario");
     for (const n of others ?? []) await sendNotice(n.chave);
   });
   await runAfterResponse(() => deliverEnvelopeWebhooks(ctx.envelope.id));
+}
+
+// Propriedades de assina_documento_assinado (seção 21), calculadas depois da resposta: método,
+// quantos campos a pessoa tinha, se o CPF foi exigido e os minutos desde o primeiro convite
+// (reenvio, lembrete e "Copiar link" não zeram a conta).
+async function signedProperties(ctx: SignerContext, metodo: "digitada" | "desenhada") {
+  const [{ count: campos }, { data: convite }] = await Promise.all([
+    db().from("as_campos").select("id", { count: "exact", head: true }).eq("signatario_id", ctx.signer.id),
+    db()
+      .from("as_eventos")
+      .select("ocorrido_em")
+      .eq("envelope_id", ctx.envelope.id)
+      .eq("signatario_id", ctx.signer.id)
+      .eq("tipo", "convite_enviado")
+      .order("seq", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  const minutes = convite ? Math.max(0, Math.floor((Date.now() - new Date(convite.ocorrido_em).getTime()) / 60_000)) : null;
+  return { metodo, campos: campos ?? 0, cpf_exigido: ctx.signer.exigir_cpf, minutos_desde_convite: minutes };
 }
 
 // E-mails depois do commit: a ação já valeu, então uma falha aqui só fica no log (sem dado

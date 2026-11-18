@@ -34,6 +34,10 @@ process.env.SELO_P12_BASE64 = seal.p12Base64;
 process.env.SELO_P12_SENHA = seal.password;
 delete process.env.SELO_TSA_URL;
 process.env.ADMIN_EMAIL = "admin@assina.test";
+// Analytics (8.11): os testes nunca postam no Visão do Produto; quem testa o envio liga um sink
+// ou aponta para um servidor local.
+delete process.env.VISAO_INGEST_URL;
+delete process.env.VISAO_API_KEY;
 
 // Espera o Supabase local responder antes dos testes (até 60 s).
 async function waitForLocalSupabase(timeoutMs = 60000): Promise<void> {

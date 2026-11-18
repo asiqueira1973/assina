@@ -5,6 +5,7 @@
 import "server-only";
 import type { NextRequest } from "next/server";
 import type { z } from "zod";
+import { trackApiCall } from "@/server/analytics/client";
 import { requireCredential, type MachineAuth } from "@/server/auth/api-credential";
 import { copy } from "@/lib/copy";
 import { LIMITE_ENVIOS_24H } from "@/lib/limits";
@@ -116,11 +117,14 @@ export function signerJson(s: SignerRow) {
 export async function apiRoute(req: NextRequest, handler: (auth: MachineAuth) => Promise<Response>): Promise<Response> {
   const auth = await requireCredential(req, ["api"]);
   if (auth instanceof Response) return auth;
+  let res: Response;
   try {
-    return await handler(auth);
+    res = await handler(auth);
   } catch (e) {
-    return apiErrorResponse(e, auth.account);
+    res = await apiErrorResponse(e, auth.account);
   }
+  trackApiCall({ credentialId: auth.credentialId, email: auth.account.email }, req.nextUrl.pathname, res.status);
+  return res;
 }
 
 // Cursor opaco da lista (13.2): a posição (criado_em, id) do último item entregue.

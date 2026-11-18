@@ -11,6 +11,7 @@ import { exchangeCode, verifyIdToken } from "@/server/auth/google";
 import { OAUTH_COOKIE, OAUTH_COOKIE_PATH, decodeOAuthCookie } from "@/server/auth/oauth-state";
 import { SESSION_COOKIE, sessionCookieOptions, signSession } from "@/server/auth/session";
 import { generateApiKey } from "@/server/credentials/api-key";
+import { track } from "@/server/analytics/client";
 import { accountStatusForGoogle, countAccountsCreatedSince, enterAccount } from "@/server/db/accounts";
 
 // Redireciona para /entrar com o código de erro e apaga o cookie do OAuth.
@@ -44,6 +45,7 @@ export async function GET(req: NextRequest) {
     const apiKey = generateApiKey();
     const entered = await enterAccount({ sub: identity.sub, email: identity.email, name: identity.name, apiKey });
     if (entered.suspensa) return fail(req, "suspensa");
+    if (entered.nova) track("assina_conta_criada", { quem: { email: identity.email }, chave: entered.contaId, propriedades: {} });
 
     const res = NextResponse.redirect(new URL(saved.volta, req.url), 302);
     res.cookies.set(SESSION_COOKIE, await signSession(entered.contaId), sessionCookieOptions());

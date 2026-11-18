@@ -6,6 +6,8 @@ import "server-only";
 import { copy } from "@/lib/copy";
 import { formatDateLong } from "@/lib/format";
 import { DOWNLOAD_URL_SEGUNDOS, ENVELOPES_POR_PAGINA, LEMBRETE_MANUAL_INTERVALO_H, MAX_LEMBRETES } from "@/lib/limits";
+import { track } from "@/server/analytics/client";
+import { originFromActor } from "@/server/analytics/events";
 import type { Database } from "@/server/db/types";
 import { db } from "@/server/db/client";
 import { mailer } from "@/server/email/mailer";
@@ -118,6 +120,7 @@ export async function remindSigner(contaId: string, envelopeId: string, signatar
     p_user_agent: meta.userAgent ?? undefined,
   });
   if (cErr) throw cErr;
+  track("assina_lembrete_enviado", { quem: { conta: contaId }, chave, propriedades: { automatico: false } });
 }
 
 // "Copiar link de assinatura" (critério 8.7): token novo, o anterior deixa de valer, evento
@@ -149,6 +152,7 @@ export async function cancelEnvelope(contaId: string, envelopeId: string, motivo
     p_user_agent: meta.userAgent ?? undefined,
   });
   if (error) rethrow(error);
+  track("assina_envelope_cancelado", { quem: { conta: contaId }, chave: envelopeId, propriedades: { origem: originFromActor(ator) } });
   const { data: notes } = await db().from("as_notificacoes").select("chave").eq("envelope_id", envelopeId).eq("conta_id", contaId).eq("tipo", "cancelado_destinatario");
   for (const n of notes ?? []) {
     try {

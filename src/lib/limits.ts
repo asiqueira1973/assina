@@ -126,3 +126,11 @@ export const MCP_LISTA_MAX = 50; // 13.3
 export const MCP_EVENTOS_DETALHE = 20; // 13.3: ver_envelope mostra os últimos 20 eventos
 export const PKCE_VERIFIER_MIN = 43; // RFC 7636
 export const PKCE_VERIFIER_MAX = 128; // RFC 7636
+
+// Analytics no Visão do Produto (épico 8.11, seção 21).
+export const ANALYTICS_TIMEOUT_MS = 4_000; // critério 8.11: dispara e esquece, com timeout de 4 s
+export const ANALYTICS_AMOSTRA_API_MS = 10_000; // seção 21: assina_api_chamada no máximo 1 a cada 10 s por credencial
+export const ANALYTICS_CLIENTE_MAX = 60; // assina_mcp_conectado.cliente (nome do cliente OAuth)
+export const ANALYTICS_NUMERO_MAX = 100_000; // teto de sanidade das contagens e horas: acima disso, o evento é descartado
+export const ANALYTICS_AMOSTRAS_EM_MEMORIA = 10_000; // credenciais lembradas pela amostragem antes de zerar o mapa
+export const ANALYTICS_ROTA_MAX = 100; // assina_api_chamada.rota

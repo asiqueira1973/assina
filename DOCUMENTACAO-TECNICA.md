@@ -4,7 +4,7 @@ Descreve o sistema **como está implementado**, não como foi planejado (spec.md
 
 | | |
 |---|---|
-| Estado | Épicos 8.0 a 8.10 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
+| Estado | Épicos 8.0 a 8.11 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
 | Stack | Next.js 16.4.6 (App Router, Cache Components, `proxy.ts`), React 19.3, TypeScript, Supabase Postgres (projeto compartilhado, prefixo `as_`), Vitest, pgTAP |
 
 ---
@@ -220,6 +220,28 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
   - **Texto no PDF:** tudo passa por `safeText` (`src/server/pdf/fonts.ts`), porque a Helvetica padrão só codifica WinAnsi e um caractere fora dele quebraria o `drawText`.
   - **Selo (11.10):** o placeholder de 24 KB entra pelo `@signpdf/placeholder-pdf-lib` com `ETSI.CAdES.detached`, e o CMS é montado à mão com node-forge (`CadesSigner`). Os atributos assinados são `contentType`, `messageDigest` e `signingCertificateV2`; não há `signingTime`, porque no PAdES a hora vai no `/M`. Com `SELO_TSA_URL`, pede o carimbo RFC 3161 (5 s) e o põe como atributo não assinado: sai `B-T`; sem resposta, `B-B`. `verifySeal` confere o hash do ByteRange e a assinatura RSA (testes). Conferido também com `openssl cms -verify`.
   - **E-mails de conclusão:** `concluido_destinatario` (assinantes e cópias) e `concluido_remetente` levam o PDF anexo se ele tiver até 7 MB. Acima disso, o do destinatário leva o botão para o link próprio `/api/final/{signatario_id}.{hmac}` (`src/server/envelopes/final-link.ts`), estável e só para o final; o link de assinatura não muda. O do remetente leva o link do detalhe. Sem `ADMIN_EMAIL`, o alerta fica pendente e o log avisa (`alerta_admin_sem_destino`). O `finalizacao_falhou_admin` vai para `ADMIN_EMAIL`.
+- **Analytics (épico 8.11, `src/server/analytics/`):**
+  - `events.ts` é o catálogo da seção 21: um esquema zod `.strict()` por evento (`EVENT_SCHEMAS`), a tela de cada um (`EVENT_SCREENS`) e o tipo `PropriedadesDeEvento`, derivado dos esquemas. Propriedade fora do esquema não compila e, em tempo de execução, descarta o evento (`analytics_evento_invalido`, só com o nome).
+  - `track(nome, {quem, chave?, propriedades})` (`client.ts`):
+    - é síncrona, nunca lança e não espera a rede;
+    - o trabalho vai para o `after()` do Next (aninhável) e, fora de uma requisição, para uma promessa solta;
+    - o POST para `VISAO_INGEST_URL`, com `x-api-key: VISAO_API_KEY` e `{"eventos":[…]}`, tem timeout de 4 s;
+    - falha vira só `analytics_falhou` com o status, `timeout` ou o código;
+    - sem as duas variáveis, nada sai (dev e testes).
+  - **Propriedades:** as que precisam de consulta (envio, assinado, concluído, MCP) são uma função que roda depois da resposta.
+  - **`id`:** sha256(`nome:registro`) em formato UUID v8 (divergência 53). Sem registro, é aleatório.
+  - **`distinct_id`:**
+    - o e-mail do remetente, lido depois da resposta pela conta ou pelo envelope;
+    - `sig_{signatario_id}` para o signatário;
+    - `anon_{uuid}` na verificação.
+  - **Onde nasce cada evento:**
+    - callback do Google (conta nova);
+    - `createDraft` (painel) ou o fim de `createEnvelopeFromApi` (API e MCP, que desfazem o rascunho se um passo falha);
+    - `sendEnvelope`, `recordView`, `validateCode`, `sign` (minutos desde o primeiro convite), `decline`;
+    - `finalizeEnvelope`, `cancelEnvelope`, `remindSigner`, `verifyDocument`;
+    - `rotateApiKey`, `saveWebhookUrl` (com URL), `exchangeCode`;
+    - `apiRoute` e `/mcp` (`trackApiCall`: amostra de 1 a cada 10 s por credencial, por instância, e rota como padrão, em que segmento desconhecido vira `{id}`).
+  - **Ficam para a faxina do 8.13:** `envelope_expirado` e o lembrete automático.
 - **Erros em log:** `src/server/error-code.ts` (`errorCode`) dá o código do erro (Postgres, `resend_NNN`) ou o nome da classe; é o que vai para o log e para `as_notificacoes.erro`, nunca a mensagem livre.
 - **E-mail:** `src/server/email/mailer.ts` escolhe o driver: Resend com `RESEND_API_KEY`; caixa local em `.caixa-de-saida-local/` (um `.txt` e um `.html` por e-mail) só fora de produção; em produção sem chave o app falha. O modelo do convite fica em `templates.ts` (seção 15.2, HTML escapado e texto puro), com remetente "{nome} via Assina" e `reply-to` do remetente.
 - **Uso do nível:** "{n} de {limite} documentos · Nível {n}" no topo da lista e na Conta, em laranja a partir de 80% (`getUsage`).
@@ -281,3 +303,7 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | 50 | Consentimento mostra também "Depois, você volta para {host}." | O nome do cliente é autodeclarado (um cliente pode se chamar "Claude"); o host de volta não mente |
 | 51 | Código reutilizado revoga o token emitido com ele; a troca não lança exceção, devolve nulo (coluna `as_oauth_codigos.credencial_id`) | RFC 9700: reuso indica vazamento. Uma exceção desfaria a revogação na mesma transação |
 | 52 | Migrations ainda não aplicadas no remoto | O hook `guard-production.sh` da sessão em que o épico foi feito (pasta do agenda-psi) bloqueou o `apply_migration`; aguardando o Alexandre |
+| 53 | `id` do evento de analytics é sha256(`nome:registro`) em formato UUID, e não o id do registro em si | O mesmo envelope gera vários eventos (criado, enviado, concluído…). Com o id puro, o ingest deduplicaria todos menos o primeiro. Continua estável por evento e registro, que é o que a seção 21 queria |
+| 54 | Na verificação pública, `distinct_id` = `anon_{uuid}`, um por consulta | A seção 21 não diz; quem verifica não tem conta, e o ingest exige `distinct_id` |
+| 55 | `documento_verificado` pelo código: `resultado` é `final` se o envelope está concluído, senão `original`; `original_multiplo` conta como `original` | A seção 21 fecha o resultado em três valores; o banco tem cinco |
+| 56 | `assina_api_chamada` também para o `/mcp` (rota `/mcp`), com a mesma amostragem | O MCP é a outra porta de máquina; a métrica "contas pela API ou pelo MCP" precisa das duas |

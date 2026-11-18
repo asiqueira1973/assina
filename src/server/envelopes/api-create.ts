@@ -27,7 +27,7 @@ import {
 } from "@/lib/limits";
 import { db } from "@/server/db/client";
 import type { Database } from "@/server/db/types";
-import { createDraft, DraftError, getEnvelope, getSigners, newUploadUrl, replaceSigners, updateDraftSettings, type EnvelopeRow, type RequestMeta } from "./drafts";
+import { createDraft, DraftError, getEnvelope, getSigners, newUploadUrl, replaceSigners, trackEnvelopeCreated, updateDraftSettings, type EnvelopeRow, type RequestMeta } from "./drafts";
 import { replaceFields } from "./fields";
 import { deleteEnvelope } from "./manage";
 import { attachFromUrl, filenameFromUrl } from "./remote-file";
@@ -93,7 +93,7 @@ export async function createEnvelopeFromApi(
     if (found) return { envelope: found, uploadUrl: await replayUploadUrl(contaId, found), existing: true };
   }
 
-  const { envelope, upload } = await createDraft(contaId, { titulo: input.titulo, origem: who.origem, ator: who.ator, meta });
+  const { envelope, upload } = await createDraft(contaId, { titulo: input.titulo, origem: who.origem, ator: who.ator, meta, deferAnalytics: true });
   try {
     const settings = {
       ...(input.mensagem !== undefined ? { mensagem: input.mensagem ?? null } : {}),
@@ -152,6 +152,7 @@ export async function createEnvelopeFromApi(
     await discard(contaId, envelope.id);
     throw e;
   }
+  trackEnvelopeCreated(contaId, envelope.id, who.origem);
   const fresh = await getEnvelope(contaId, envelope.id);
   return { envelope: fresh!, uploadUrl: input.arquivo_url ? null : upload.url, existing: false };
 }

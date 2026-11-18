@@ -5,6 +5,7 @@
 // (RFC 9728), exposto pelo CORS — é o que faz o "Add custom connector" achar o OAuth sozinho.
 import type { NextRequest } from "next/server";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { trackApiCall } from "@/server/analytics/client";
 import { requireCredential } from "@/server/auth/api-credential";
 import { requestMeta } from "@/server/http";
 import { buildMcpServer } from "@/server/mcp/tools";
@@ -28,7 +29,9 @@ async function handle(req: NextRequest): Promise<Response> {
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   await server.connect(transport);
   try {
-    return withCors(await transport.handleRequest(req));
+    const res = await transport.handleRequest(req);
+    trackApiCall({ credentialId: auth.credentialId, email: auth.account.email }, "/mcp", res.status);
+    return withCors(res);
   } finally {
     await server.close();
   }

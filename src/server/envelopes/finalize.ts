@@ -18,6 +18,7 @@ import { createHash } from "node:crypto";
 import { PDFDocument } from "pdf-lib";
 import { copy } from "@/lib/copy";
 import { ASSINATURA_PNG_MAX_BYTES, FINALIZACAO_TENTATIVAS, LIMITE_ARQUIVO_BYTES } from "@/lib/limits";
+import { track } from "@/server/analytics/client";
 import { db } from "@/server/db/client";
 import { errorCode } from "@/server/error-code";
 import { storage } from "@/server/files/storage";
@@ -179,7 +180,17 @@ export async function finalizeEnvelope(envelopeId: string): Promise<FinalizeResu
   const { data: notes } = await db().from("as_notificacoes").select("chave").eq("envelope_id", envelopeId).in("tipo", ["concluido_destinatario", "concluido_remetente"]);
   for (const n of notes ?? []) await safeNotice(n.chave);
   await deliverEnvelopeWebhooks(envelopeId);
+  track("assina_envelope_concluido", { quem: { envelope: envelopeId }, chave: envelopeId, propriedades: () => concludedProperties(envelopeId) });
   return "concluido";
+}
+
+// Propriedades de assina_envelope_concluido (seção 21): origem, horas entre o envio e a
+// conclusão e o nível do selo.
+async function concludedProperties(envelopeId: string) {
+  const { data: e } = await db().from("as_envelopes").select("origem, enviado_em, concluido_em, selo").eq("id", envelopeId).maybeSingle();
+  if (!e?.enviado_em || !e.concluido_em || (e.selo !== "B-B" && e.selo !== "B-T")) return null;
+  const hours = Math.max(0, (new Date(e.concluido_em).getTime() - new Date(e.enviado_em).getTime()) / 3600_000);
+  return { origem: e.origem, horas_ate_concluir: Math.round(hours * 10) / 10, selo: e.selo as "B-B" | "B-T" };
 }
 
 async function safeNotice(chave: string) {

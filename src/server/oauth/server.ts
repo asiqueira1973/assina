@@ -6,7 +6,8 @@
 // Os endereços vêm sempre de NEXT_PUBLIC_SITE_URL, nunca do Host da requisição (6.4).
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
-import { OAUTH_CLIENTE_NOME_MAX, OAUTH_CODIGO_SEGUNDOS, OAUTH_REDIRECT_URIS_MAX, OAUTH_REDIRECT_URI_MAX } from "@/lib/limits";
+import { ANALYTICS_CLIENTE_MAX, OAUTH_CLIENTE_NOME_MAX, OAUTH_CODIGO_SEGUNDOS, OAUTH_REDIRECT_URIS_MAX, OAUTH_REDIRECT_URI_MAX } from "@/lib/limits";
+import { track } from "@/server/analytics/client";
 import { hashCredential } from "@/server/credentials/api-key";
 import { db } from "@/server/db/client";
 
@@ -107,5 +108,14 @@ export async function exchangeCode(code: string, clientId: string, redirectUri: 
     p_token_prefixo: token.slice(0, 16),
   });
   if (error) throw error;
-  return data ? token : null;
+  if (!data) return null;
+  const contaId = data;
+  track("assina_mcp_conectado", {
+    quem: { conta: contaId },
+    propriedades: async () => {
+      const { data: c } = await db().from("as_oauth_clientes").select("nome").eq("id", clientId).maybeSingle();
+      return c ? { cliente: c.nome.slice(0, ANALYTICS_CLIENTE_MAX) } : null;
+    },
+  });
+  return token;
 }

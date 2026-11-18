@@ -18,6 +18,7 @@ import {
   TITULO_MAX,
   UPLOAD_URL_SEGUNDOS,
 } from "@/lib/limits";
+import { track } from "@/server/analytics/client";
 import { db } from "@/server/db/client";
 import type { Database } from "@/server/db/types";
 import { envelopePaths, storage } from "@/server/files/storage";
@@ -72,7 +73,9 @@ export function titleFromFilename(filename: string): string {
 // Cria o rascunho (com o evento "criado") e a URL de upload (8.2). Tenta de novo se o código de
 // verificação sorteado já existir (colisão é raríssima, mas o banco tem unique).
 // Recebe: conta, título, origem, ator e quem pediu. Devolve: o envelope e a URL de upload.
-export async function createDraft(contaId: string, input: { titulo: string; origem: Origin; ator: Actor; meta: RequestMeta }) {
+// deferAnalytics: a criação pela API e pelo MCP registra o evento só no fim, porque desfaz o
+// rascunho se um passo seguinte falha (e esse rascunho não conta como criado).
+export async function createDraft(contaId: string, input: { titulo: string; origem: Origin; ator: Actor; meta: RequestMeta; deferAnalytics?: boolean }) {
   let envelope: EnvelopeRow | null = null;
   for (let attempt = 0; attempt < 3 && !envelope; attempt++) {
     const { data, error } = await db().rpc("as_fn_cria_rascunho", {
@@ -89,8 +92,14 @@ export async function createDraft(contaId: string, input: { titulo: string; orig
     envelope = data as EnvelopeRow;
   }
   if (!envelope) throw new Error("codigo_verificacao_colidiu");
+  if (!input.deferAnalytics) trackEnvelopeCreated(contaId, envelope.id, input.origem);
   const upload = await storage().createUploadUrl(envelopePaths(contaId, envelope.id).upload, "application/pdf", UPLOAD_URL_SEGUNDOS);
   return { envelope, upload };
+}
+
+// assina_envelope_criado (seção 21). Recebe: conta, envelope e origem.
+export function trackEnvelopeCreated(contaId: string, envelopeId: string, origem: Origin): void {
+  track("assina_envelope_criado", { quem: { conta: contaId }, chave: envelopeId, propriedades: { origem } });
 }
 
 // Lê um envelope da conta. Devolve: o envelope ou null (inclusive se for de outra conta).

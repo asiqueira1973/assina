@@ -8,6 +8,8 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { LIMITE_ARQUIVO_BYTES, LIMITE_ENVIOS_24H, LIMITE_POR_NIVEL } from "@/lib/limits";
+import { track } from "@/server/analytics/client";
+import { originFromActor } from "@/server/analytics/events";
 import { db } from "@/server/db/client";
 import type { Database } from "@/server/db/types";
 import { storage } from "@/server/files/storage";
@@ -64,5 +66,32 @@ export async function sendEnvelope(contaId: string, envelopeId: string, input: {
     else failed++;
   }
   const after = await getEnvelope(contaId, envelopeId);
+  track("assina_envelope_enviado", {
+    quem: { conta: contaId },
+    chave: envelopeId,
+    propriedades: () => sentProperties(contaId, envelopeId, originFromActor(input.ator)),
+  });
   return { envelope: after!, invites: { sent, failed } };
+}
+
+// Propriedades de assina_envelope_enviado (seção 21), calculadas depois da resposta: nível da
+// conta, quantos assinam e quantos recebem cópia, ordem, se há campos, páginas e prazo.
+async function sentProperties(contaId: string, envelopeId: string, origem: "painel" | "api" | "mcp") {
+  const [{ data: conta }, { data: e }, { data: sigs }, { count: campos }] = await Promise.all([
+    db().from("as_contas").select("nivel").eq("id", contaId).maybeSingle(),
+    db().from("as_envelopes").select("em_ordem, paginas, prazo_dias").eq("id", envelopeId).eq("conta_id", contaId).maybeSingle(),
+    db().from("as_signatarios").select("papel").eq("envelope_id", envelopeId).eq("conta_id", contaId),
+    db().from("as_campos").select("id", { count: "exact", head: true }).eq("envelope_id", envelopeId),
+  ]);
+  if (!conta || !e) return null;
+  return {
+    origem,
+    nivel: conta.nivel as 1 | 2 | 3,
+    assinantes: (sigs ?? []).filter((s) => s.papel === "assinar").length,
+    copias: (sigs ?? []).filter((s) => s.papel !== "assinar").length,
+    em_ordem: e.em_ordem,
+    com_campos: (campos ?? 0) > 0,
+    paginas: e.paginas ?? 0,
+    prazo_dias: e.prazo_dias,
+  };
 }
