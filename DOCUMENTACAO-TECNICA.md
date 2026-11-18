@@ -4,7 +4,7 @@ Descreve o sistema **como está implementado**, não como foi planejado (spec.md
 
 | | |
 |---|---|
-| Estado | Épicos 8.0 a 8.11 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
+| Estado | Épicos 8.0 a 8.12 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
 | Stack | Next.js 16.4.6 (App Router, Cache Components, `proxy.ts`), React 19.3, TypeScript, Supabase Postgres (projeto compartilhado, prefixo `as_`), Vitest, pgTAP |
 
 ---
@@ -105,10 +105,14 @@ Fonte: `supabase/migrations/20261117130100_as_logica.sql`. Toda função com `se
 
 Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `envelope_congelado`, `envelope_em_andamento`, `status_mudou`, `campo_invalido`, `campos_demais`, `status_mudou`, `envelope_mudou`, `sem_assinante`, `limite_diario`, `limite_do_nivel`, `nao_encontrado`, `email_repetido`, `assinantes_demais`, `copias_demais`).
 
-## 4. Mapa tela → tabelas (até o 8.8)
+## 4. Mapa tela → tabelas (até o 8.12)
 
 | Tela / rota | Lê | Escreve | Passa por |
 |---|---|---|---|
+| `/` (público, página inicial) | — | — | o proxy manda quem tem sessão para `/painel` |
+| `/privacidade`, `/termos` (públicos) | — | — | `LegalPage` com `copy.legal` |
+| `/robots.txt`, `/sitemap.xml` | — | — | `src/app/robots.ts`, `src/app/sitemap.ts` |
+| `POST /api/painel/conta/excluir` | `as_contas` (e-mail) | apaga `as_contas` (cascata em tudo) e a pasta `{conta}/` do armazenamento; apaga o cookie da sessão | `requireConta`, `deleteAccount` |
 | `/entrar` | — | — | — |
 | `GET /api/auth/google` | — | cookie `as_oauth_google` | — |
 | `GET /api/auth/google/callback` | `as_contas` (situação, contagem de 24 h) | `as_contas`, `as_credenciais` | `as_fn_entra_conta` |
@@ -155,7 +159,14 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 ## 5. Lógica por tela
 
 - **Login:** `/api/auth/google` gera state e PKCE, guarda os dois e a rota de volta (saneada: só `/painel…` e `/oauth/autorizar…`) num cookie de 10 min e vai ao Google com `openid email profile`. O callback confere o state, troca o código com o verifier, valida o `id_token` (assinatura, `aud`, `iss`, `exp`, `email_verified`), aplica bloqueados, permitidos, suspensão e o limite diário de contas novas **antes de gravar qualquer coisa**, gera a chave de API e chama `as_fn_entra_conta`. Qualquer falha volta para `/entrar?erro=…` com a frase da seção 15.
-- **Proxy:** `/painel*` sem sessão válida vai para `/entrar?volta=<rota>`; sessão com mais de 7 dias é renovada; `/` redireciona para o painel ou para `/entrar` até a página inicial existir.
+- **Proxy:** `/painel*` sem sessão válida vai para `/entrar?volta=<rota>`; sessão com mais de 7 dias é renovada; `/` com sessão vai para o painel e, sem, mostra a página inicial (8.12).
+- **Página inicial e páginas legais (épico 8.12):**
+  - `/` sem sessão mostra o título, o subtítulo, "Entrar com Google" (link direto para `/api/auth/google`), "Verificar um documento" e o aviso de `LEGAL_NEGATIVAS`; com sessão, o proxy manda para `/painel`. O proxy só confere a assinatura do cookie: um cookie válido de conta excluída ou suspensa vai para `/painel` e de lá para `/entrar`.
+  - `/termos` e `/privacidade` usam `LegalPage` (`src/features/public/components/`) com as seções de `copy.legal`. Os trechos que dizem o que o Assina não é vêm de `LEGAL_NEGATIVAS`, declarado antes de `copy`.
+  - Rodapé público (`SiteFooter`): Privacidade · Termos · Código aberto no GitHub · Um produto DabLab, em dois pares que não se quebram (no celular, um par por linha).
+  - Indexação: o layout raiz é `noindex`; `/`, `/verificar`, `/docs/api`, `/privacidade` e `/termos` sobrepõem com `index: true`. O `robots.txt` bloqueia `/painel`, `/assinar/`, `/api/`, `/oauth/`, `/mcp`, `/entrar` e `/sair` e aponta o `sitemap.xml` (as cinco páginas). `/verificar/{codigo}` fica liberado no robots, mas com `noindex` (o buscador precisa ler a página para ver o `noindex`).
+- **Excluir minha conta (épico 8.12):** diálogo na Conta que pede o e-mail. `deleteAccount` (`src/server/account/delete.ts`) confere o e-mail sem diferença de maiúsculas e espaços, apaga a linha de `as_contas` (a cascata leva credenciais, envelopes, inclusive os em andamento, signatários, campos, trilha, notificações e entregas; os triggers deixam a cascata passar) e depois a pasta `{conta}/` do armazenamento (falha vira `arquivos_nao_apagados` no log). A rota apaga o cookie da sessão, e a tela vai para `/`.
+- **Conta suspensa:** `requireConta` e `requireCredential` dão 401, e o link de assinatura mostra "Este documento não está disponível." (`signerPageState` → `indisponivel`; as rotas `/api/assinar/*` dão 404). Reativar (`suspensa_em = null`) devolve tudo, sem outro passo. Coberto ponta a ponta em `src/app/api/painel/conta/conta.route.test.ts`.
 - **Painel:** o layout lê a conta (conta suspensa conta como inexistente) e, sem aceite, mostra só as boas-vindas. O aceite é um POST; o painel só aparece depois que o servidor confirmou (`router.refresh`), nunca por estado local.
 
 - **Novo envelope:** escolher o PDF cria o rascunho (`POST /api/painel/envelopes`, título do nome do arquivo), sobe direto para o armazenamento pela URL assinada (progresso por XHR) e pede a validação. O servidor lê `upload.pdf` numa leitura só, limitada a 10 MB (no R2, com `Range`), apaga o upload, valida a regra 11.1 (`%PDF-`, 10 MB, senha, 1–100 páginas, página ≤ 1.440 pt) e grava **os mesmos bytes que validou** em `original-{versao}.pdf`; `as_fn_anexa_arquivo` aponta o envelope para ele numa transação e o original anterior é apagado. Arquivo inválido: nada muda e a tela mostra a frase da seção 15. Troca válida apaga os campos e avisa. PDF já assinado digitalmente passa, com aviso.
@@ -307,3 +318,5 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | 54 | Na verificação pública, `distinct_id` = `anon_{uuid}`, um por consulta | A seção 21 não diz; quem verifica não tem conta, e o ingest exige `distinct_id` |
 | 55 | `documento_verificado` pelo código: `resultado` é `final` se o envelope está concluído, senão `original`; `original_multiplo` conta como `original` | A seção 21 fecha o resultado em três valores; o banco tem cinco |
 | 56 | `assina_api_chamada` também para o `/mcp` (rota `/mcp`), com a mesma amostragem | O MCP é a outra porta de máquina; a métrica "contas pela API ou pelo MCP" precisa das duas |
+| 57 | Exclusão da conta entrou no 8.12 (rota `POST /api/painel/conta/excluir` da seção 13.1 e texto da seção 15.1), embora não esteja nos critérios do épico | Está no escopo do MVP (seção 3), e os Termos e a Privacidade do 8.12 prometem a exclusão. Mensagem do e-mail que não confere: "O e-mail não confere." (spec v0.15) |
+| 58 | Textos dos Termos e da Privacidade escritos no 8.12, sem revisão jurídica | Em nome da DabLab, seguindo a seção 20 e o modelo do Reunião; revisão de um advogado fica na PENDENCIAS (P11) |

@@ -1,0 +1,33 @@
+/* Páginas públicas institucionais (seção 16, épico 8.12): página inicial, Termos e Privacidade.
+   Uma coluna central, título grande, botões em pílula e rodapé discreto. */
+.page { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; padding: 48px 16px 32px; background: var(--bg); }
+.column { width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 20px; flex: 1; }
+.brand { margin: 0; font-size: 17px; font-weight: 700; color: var(--accent); }
+.hero { display: flex; flex-direction: column; gap: 20px; padding-top: 12vh; }
+.title { margin: 0; font-size: 48px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.08; }
+.subtitle { margin: 0; font-size: 21px; line-height: 1.4; color: var(--text-secondary); }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+.primary { display: inline-flex; align-items: center; justify-content: center; min-height: var(--tap); padding: 0 24px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 17px; font-weight: 600; text-decoration: none; }
+.secondary { display: inline-flex; align-items: center; justify-content: center; min-height: var(--tap); padding: 0 24px; border: 1px solid var(--hairline); border-radius: 999px; background: var(--bg); color: var(--text); font-size: 17px; font-weight: 600; text-decoration: none; }
+.primary:focus-visible, .secondary:focus-visible, .footer a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.notice { margin: 8px 0 0; font-size: 14px; line-height: 1.45; color: var(--text-secondary); }
+.legalTitle { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.15; }
+.updated { margin: 0; font-size: 14px; color: var(--text-secondary); }
+.section { display: flex; flex-direction: column; gap: 10px; }
+.section h2 { margin: 12px 0 0; font-size: 20px; font-weight: 700; }
+.section p { margin: 0; font-size: 16px; line-height: 1.55; overflow-wrap: anywhere; }
+.footer { width: 100%; max-width: 640px; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 0; margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--hairline); font-size: 14px; color: var(--text-secondary); }
+.footer a { color: var(--text-secondary); text-decoration: none; padding: 4px 0; }
+.footer a:hover { color: var(--text); }
+.separator { padding: 4px 8px; }
+.group { white-space: nowrap; }
+@media (max-width: 600px) {
+  .page { padding: 24px 16px; }
+  .hero { padding-top: 6vh; }
+  .title { font-size: 36px; }
+  .subtitle { font-size: 18px; }
+  .legalTitle { font-size: 28px; }
+  .actions > a { flex: 1 1 100%; }
+  .footer { flex-direction: column; align-items: center; }
+  .groupSeparator { display: none; }
+}

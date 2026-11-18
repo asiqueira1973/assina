@@ -2,8 +2,7 @@
 // 1) Painel: checagem otimista; /painel sem cookie de sessão válido vai para /entrar?volta=… e o
 //    cookie com mais de 7 dias é renovado. A autorização de verdade é feita por requireConta() /
 //    getCurrentAccount().
-// 2) "/": até a página inicial existir (épico 8.12), vai para o painel com sessão e para /entrar
-//    sem.
+// 2) "/": com sessão válida, vai para o painel; sem, mostra a página inicial (critério 8.12).
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, sessionCookieOptions, shouldRenew, signSession, verifySession } from "@/server/auth/session";
 
@@ -25,7 +24,7 @@ export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
   if (path === "/painel" || path.startsWith("/painel/")) return guardPanel(request);
   const session = await verifySession(request.cookies.get(SESSION_COOKIE)?.value);
-  return NextResponse.redirect(new URL(session ? "/painel" : "/entrar", request.url));
+  return session ? NextResponse.redirect(new URL("/painel", request.url)) : NextResponse.next();
 }
 
 export const config = {

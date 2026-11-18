@@ -1,7 +1,8 @@
 // [Remetente] Conta — seção 10. No épico 8.1: nome, e-mail e Sair (POST /sair, nunca link).
-// Nível e uso (regra 11.20) desde o 8.4; excluir a conta, no 8.12.
+// Nível e uso (regra 11.20) desde o 8.4; "Excluir minha conta" desde o 8.12.
 import { Suspense } from "react";
 import { copy } from "@/lib/copy";
+import { DeleteAccount } from "@/features/account/components/delete-account";
 import { UsageLine } from "@/features/envelopes/components/usage-line";
 import { getCurrentAccount } from "@/server/auth/require-conta";
 import { getUsage } from "@/server/envelopes/usage";
@@ -23,6 +24,12 @@ async function AccountDetails() {
   );
 }
 
+// "Excluir minha conta", com o e-mail da conta como dica do campo de confirmação.
+async function DeleteAccountAction() {
+  const account = await getCurrentAccount();
+  return account ? <DeleteAccount email={account.email} /> : null;
+}
+
 // Página do painel: depende da sessão, fica fora da validação de navegação instantânea (ver o
 // comentário em src/app/painel/layout.tsx e a pegadinha no CLAUDE.md).
 export const instant = false;
@@ -36,9 +43,14 @@ export default function ContaPage() {
       <Suspense fallback={<div className={conta.card} aria-busy="true" />}>
         <AccountDetails />
       </Suspense>
-      <form action="/sair" method="post">
-        <button className={conta.signOut} type="submit">{copy.account.signOut}</button>
-      </form>
+      <div className={conta.actions}>
+        <form action="/sair" method="post">
+          <button className={conta.signOut} type="submit">{copy.account.signOut}</button>
+        </form>
+        <Suspense fallback={null}>
+          <DeleteAccountAction />
+        </Suspense>
+      </div>
     </>
   );
 }

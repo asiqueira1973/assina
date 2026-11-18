@@ -9,7 +9,7 @@ Se um teste falhar, corrija o código, não o teste; nunca pule nem apague teste
 Bug: teste que reproduz → ver falhar → commit → `touch .claude/fix-mode` → corrigir → `rm .claude/fix-mode`.
 
 ## Estado
-Épicos 8.0 a 8.11 (rascunho, upload, editor de campos, envio, assinatura, finalização com manifesto e selo, painel, verificação pública, API REST, webhooks, MCP e OAuth, analytics) concluídos. Migrations aplicadas só no **local**; pendências do Alexandre em `PENDENCIAS.md`. Próximo: 8.12 (página inicial, páginas legais e proteções). E-mail em dev vai para `.caixa-de-saida-local/`.
+Épicos 8.0 a 8.12 (rascunho, upload, editor de campos, envio, assinatura, finalização com manifesto e selo, painel, verificação pública, API REST, webhooks, MCP e OAuth, analytics, página inicial, páginas legais, suspensão e exclusão da conta) concluídos. Migrations aplicadas só no **local**; pendências do Alexandre em `PENDENCIAS.md`. Próximo: 8.13 (faxina diária, documentação e entrega). E-mail em dev vai para `.caixa-de-saida-local/`.
 
 ## Convenções (seção 18)
 - Banco em português `snake_case`, **sempre com prefixo `as_`** (projeto Supabase compartilhado `jeesdmfcrmhyufwzwzwt`). Código, variáveis e arquivos em inglês; fronteira em `src/server/db/`.
@@ -26,7 +26,7 @@ Bug: teste que reproduz → ver falhar → commit → `touch .claude/fix-mode` �
 - Remoto compartilhado: migrations pelo MCP `apply_migration` (mesmo SQL do arquivo), **nunca** `supabase db push`; advisors filtrados a `as_*`; regenerar `supabase/schema.sql` no mesmo commit. Supabase local nas portas **555xx**.
 - Service role ignora RLS: toda consulta filtra por `conta_id` ou `token_hash`.
 - Trilha (`as_eventos`) só por `rpc('as_fn_registra_evento')`. O hook bloqueia escrita direta.
-- Texto que explica o que o Assina **não** é ("ICP-Brasil", "certificado digital") fica no bloco `LEGAL_NEGATIVAS` do `copy.ts`. Um Edit que mexa só no meio desse bloco é barrado pelo `guard-copy` porque o trecho não traz a linha `LEGAL_NEGATIVAS`: nesse caso, edite o bloco inteiro.
+- Texto que explica o que o Assina **não** é ("ICP-Brasil", "certificado digital") fica no bloco `LEGAL_NEGATIVAS` do `copy.ts`, declarado **antes** de `copy` (os Termos o citam). O `guard-copy` só isenta da linha `export const LEGAL_NEGATIVAS` até o `}` de coluna 0: um Edit que mexa só no meio do bloco é barrado (o trecho não traz a declaração); nesse caso, edite o bloco inteiro.
 - O `guard-copy` lê o arquivo inteiro, comentários inclusive: em `src/app`, `src/features`, `copy.ts`, e-mail e manifesto, nem comentário pode dizer "assinatura digital", "certificado digital" etc. Escreva "assinado eletronicamente".
 - Regex com acento em hook: o grep do macOS compara byte a byte dentro de `[...]`. Use alternância `(a|á)`, nunca `[aá]`.
 - Hook novo ou alterado → acrescente casos em `scripts/test-guardrails.sh` e atualize o Anexo B do spec no mesmo commit.

@@ -30,9 +30,11 @@ describe("proxy", () => {
     expect(res.cookies.get("as_sessao")?.value).not.toBe(old);
   });
 
-  it("/ vai para /entrar sem sessão e para /painel com", async () => {
+  // Critério 8.12: sem sessão, "/" mostra a página inicial (antes do 8.12, ia para /entrar).
+  it("/ mostra a página inicial sem sessão e vai para /painel com", async () => {
     const without = await proxy(new NextRequest("http://localhost:3030/"));
-    expect(new URL(without.headers.get("location")!).pathname).toBe("/entrar");
+    expect(without.headers.get("location")).toBeNull();
+    expect(without.headers.get("x-middleware-next")).toBe("1");
     const token = await signSession("conta-1");
     const withSession = await proxy(new NextRequest("http://localhost:3030/", { headers: { cookie: `as_sessao=${token}` } }));
     expect(new URL(withSession.headers.get("location")!).pathname).toBe("/painel");

@@ -3,9 +3,13 @@
 // explicam o que o Assina NÃO é vão em LEGAL_NEGATIVAS, o único bloco que o guard-copy ignora.
 
 import {
+  DOWNLOAD_FINAL_DIAS,
   DOWNLOAD_URL_SEGUNDOS,
+  EXPURGO_ARQUIVOS_DIAS,
   LEMBRETE_MANUAL_INTERVALO_H,
   LIMITE_ARQUIVO_BYTES,
+  LIMITE_ENVIOS_24H,
+  LIMITE_POR_NIVEL,
   MAX_PAGINAS,
   MCP_EVENTOS_DETALHE,
   MCP_LISTA_MAX,
@@ -15,7 +19,19 @@ import {
   PRAZO_DIAS_MAX,
   PRAZO_DIAS_MIN,
   PRAZO_DIAS_PADRAO,
+  RASCUNHO_ABANDONADO_DIAS,
+  SESSAO_SIGNATARIO_S,
 } from "./limits";
+
+// Textos que explicam o que o Assina NÃO é (seção 20.1 e princípio 4): o aviso da página inicial e
+// os trechos dos Termos e da Privacidade. É o único bloco que o guard-copy não confere; fica antes
+// de `copy` porque as páginas legais o citam.
+export const LEGAL_NEGATIVAS = {
+  homeNotice: "Para escrituras e atos que exigem certificado ICP-Brasil, use um cartório ou certificado próprio.",
+  termsIsNot:
+    "O Assina não faz assinatura digital no padrão ICP-Brasil, não faz assinatura qualificada e não substitui a firma reconhecida em cartório. Não use o Assina para atos que a lei exige com certificado ICP-Brasil ou por escritura pública, como escrituras e atos de registro de imóveis, certos atos perante o poder público e procurações que exigem forma especial. Nesses casos, procure um cartório ou use um certificado próprio.",
+  sealIsNot: "O selo da plataforma protege a integridade do arquivo. Ele não é a assinatura de quem assinou nem um certificado ICP-Brasil.",
+} as const;
 
 export const copy = {
   appName: "Assina",
@@ -522,6 +538,192 @@ export const copy = {
   account: {
     title: "Conta",
     signOut: "Sair",
+    // Seção 15.1 (Conta) e épico 8.12.
+    delete: "Excluir minha conta",
+    deleteTitle: "Excluir minha conta?",
+    deleteBody: "Todos os envelopes, documentos e trilhas serão apagados. Baixe o que precisar antes. Para confirmar, digite seu e-mail.",
+    deleteConfirm: "Excluir conta",
+    deleteMismatch: "O e-mail não confere.",
+    close: "Voltar",
+  },
+  // Página inicial (seção 15.1, épico 8.12).
+  home: {
+    title: "Mande documentos para assinar.",
+    subtitle: "Suba um PDF, diga quem assina e receba de volta o documento assinado, com a trilha de auditoria. Grátis.",
+    signIn: "Entrar com Google",
+    verify: "Verificar um documento",
+  },
+  // Rodapé das páginas públicas (seção 15.1): "Privacidade · Termos · Código aberto no GitHub · Um produto DabLab".
+  footer: {
+    privacy: "Privacidade",
+    terms: "Termos",
+    source: "Código aberto no GitHub",
+    madeBy: "Um produto DabLab",
+    sourceUrl: "https://github.com/asiqueira1973/assina",
+    madeByUrl: "https://dablab.com.br",
+  },
+  // Termos de uso e Política de privacidade (seção 20, épico 8.12). Rascunho para revisão jurídica
+  // (PENDENCIAS). Os trechos que dizem o que o Assina não é vêm de LEGAL_NEGATIVAS.
+  legal: {
+    updated: "Última atualização: 17 de novembro de 2026.",
+    terms: "Termos de uso",
+    privacy: "Política de privacidade",
+    termsSections: [
+      {
+        title: "O serviço",
+        paragraphs: [
+          "O Assina (assina.app.br) é um serviço gratuito da DabLab — Alexandre da Silva de Siqueira LTDA - ME, CNPJ 61.033.268/0001-14, São Paulo/SP — para mandar documentos em PDF para assinatura eletrônica, acompanhar quem já assinou e receber de volta o documento assinado, com a trilha de auditoria.",
+          "Ao entrar no Assina, você aceita estes Termos e a Política de privacidade.",
+        ],
+      },
+      {
+        title: "Sua conta",
+        paragraphs: [
+          "Você entra com uma conta Google. Precisa ter 18 anos ou mais e é responsável pelo que acontece na sua conta, inclusive pelo que for feito com a sua chave de API e pelas conexões com assistentes, como o Claude e o ChatGPT. Guarde a chave como uma senha e revogue em Integrações o que não usar mais.",
+        ],
+      },
+      {
+        title: "O que vale uma assinatura no Assina",
+        paragraphs: [
+          "As assinaturas feitas no Assina são assinaturas eletrônicas. Quem assina comprova o acesso ao próprio e-mail por um código de uso único, e cada passo fica registrado numa trilha de auditoria. A validade entre as partes se apoia no art. 10, § 2º, da Medida Provisória 2.200-2/2001, que admite outros meios de comprovar a autoria e a integridade quando as partes os aceitam.",
+          LEGAL_NEGATIVAS.termsIsNot,
+          LEGAL_NEGATIVAS.sealIsNot,
+          "Cabe a você avaliar se a assinatura eletrônica serve para o seu documento e se a outra parte a aceita.",
+        ],
+      },
+      {
+        title: "Uso permitido",
+        paragraphs: [
+          "Não é permitido usar o Assina para mandar spam, enganar pessoas, mandar documentos falsos, se passar por outra pessoa ou empresa, coletar dados de terceiros sem base legal, fazer qualquer coisa ilegal ou tentar burlar a segurança ou os limites do serviço.",
+          "Não mande documentos com dados de saúde, dados biométricos ou dados de crianças e adolescentes sem uma base legal própria para isso.",
+        ],
+      },
+      {
+        title: "Limites",
+        paragraphs: [
+          `O Assina é gratuito e tem limites para proteger o serviço: até ${LIMITE_ENVIOS_24H} envelopes enviados a cada 24 horas por conta e um total de documentos guardados que depende do nível da conta (${LIMITE_POR_NIVEL[1]} no nível 1). Os limites podem mudar.`,
+        ],
+      },
+      {
+        title: "Dados de quem recebe os seus documentos",
+        paragraphs: [
+          "Você é o controlador dos dados das pessoas para quem manda documentos e do conteúdo dos documentos. A DabLab trata esses dados como operadora, em seu nome: só para prestar o serviço, sem usá-los para outro fim, com os subprocessadores listados na Política de privacidade.",
+          "Você precisa ter base legal para mandar esses dados e para pedir o CPF de quem assina. Quando você exclui um envelope ou a sua conta, esses dados são apagados do Assina.",
+        ],
+      },
+      {
+        title: "Gratuito e sem garantia",
+        paragraphs: [
+          "O Assina é oferecido de graça, como está. Fazemos o possível para que funcione bem, mas não garantimos que estará sempre disponível ou sem erros. Guarde uma cópia dos documentos importantes: baixe o PDF assinado.",
+          "Podemos mudar, suspender ou encerrar o serviço. Se for encerrado, avisaremos com antecedência razoável para você baixar os seus documentos.",
+        ],
+      },
+      {
+        title: "Suspensão e exclusão",
+        paragraphs: [
+          "Podemos suspender contas que violem estes Termos ou coloquem o serviço ou outras pessoas em risco. Enquanto a conta estiver suspensa, ela não entra no painel, as integrações param e os links de assinatura dos envelopes dela deixam de funcionar.",
+          "Você pode excluir a sua conta quando quiser, em Conta, no painel. Isso apaga todos os envelopes, documentos e trilhas, e a verificação deixa de encontrá-los.",
+        ],
+      },
+      {
+        title: "Responsabilidade",
+        paragraphs: [
+          "Na medida permitida pela lei, a DabLab não responde pelo conteúdo dos documentos, pela recusa da outra parte em aceitar a assinatura eletrônica, por e-mails que não chegaram, nem por falhas de serviços de terceiros.",
+        ],
+      },
+      {
+        title: "Código aberto",
+        paragraphs: ["O código do Assina é aberto, sob a licença MIT, e está no GitHub."],
+      },
+      {
+        title: "Mudanças nestes Termos",
+        paragraphs: [
+          "Se estes Termos mudarem de forma importante, avisaremos por e-mail ou no próprio Assina. Continuar usando depois do aviso significa aceitar a nova versão.",
+        ],
+      },
+      {
+        title: "Lei e foro",
+        paragraphs: [
+          "Estes Termos seguem as leis do Brasil. Fica eleito o foro da comarca de São Paulo/SP, ressalvado o direito do consumidor de propor ação no foro do seu domicílio.",
+          "Dúvidas: alexandre@dablab.com.br.",
+        ],
+      },
+    ],
+    privacySections: [
+      {
+        title: "Quem somos",
+        paragraphs: [
+          "O Assina (assina.app.br) é um serviço gratuito de assinatura eletrônica da DabLab — Alexandre da Silva de Siqueira LTDA - ME, CNPJ 61.033.268/0001-14, com sede em São Paulo/SP.",
+          "Para qualquer assunto sobre privacidade, escreva para alexandre@dablab.com.br.",
+        ],
+      },
+      {
+        title: "Se você manda documentos pelo Assina",
+        paragraphs: [
+          "Guardamos o seu nome, o seu e-mail e o identificador da sua conta Google, a data em que você aceitou estes termos, os documentos e envelopes que você cria e, das integrações, a chave de API (cifrada) e os acessos de assistentes (só como código embaralhado, que não dá para reverter).",
+          "De cada ação sua num envelope (criar, enviar, lembrar, cancelar, baixar), guardamos na trilha a hora, o endereço IP e o navegador. A trilha aparece no manifesto do documento assinado, que chega a todos os participantes.",
+          "Usamos esses dados para manter a sua conta, mandar os documentos e os avisos por e-mail e guardar a trilha de cada envelope. Para esses dados, a DabLab é a controladora, e a base legal é a execução do contrato que você aceita nos Termos de uso (LGPD, art. 7º, V).",
+        ],
+      },
+      {
+        title: "Se você recebeu um documento para assinar",
+        paragraphs: [
+          "Guardamos o nome e o e-mail que quem mandou o documento informou, o CPF se ele o pediu, a imagem ou o texto da sua assinatura, o que você preencheu nos campos do documento e, de cada passo (abrir, receber o código, assinar ou recusar), a hora, o endereço IP e o navegador. Isso serve para provar quem assinou, quando e que o documento não mudou depois.",
+          "Parte desses dados aparece no manifesto, a página que vai no fim do documento assinado e chega a todos os participantes.",
+          "Quem decide sobre esses dados é quem mandou o documento para você; o Assina os trata em nome dele. Se quiser excluí-los ou corrigi-los, peça a ele. Se não conseguir falar com ele, escreva para alexandre@dablab.com.br. O seu e-mail não é usado para nada além desse documento.",
+        ],
+      },
+      {
+        title: "Os documentos",
+        paragraphs: [
+          `Os arquivos ficam num armazenamento privado. O texto dos e-mails não traz o conteúdo do documento, só o título que quem mandou escolheu. O e-mail de conclusão leva o PDF assinado em anexo ou, se ele for grande, um link para baixá-lo que vale por ${DOWNLOAD_FINAL_DIAS} dias. No painel, cada download usa um link que vale por poucos minutos.`,
+        ],
+      },
+      {
+        title: "A verificação pública",
+        paragraphs: [
+          "Qualquer pessoa que tenha o arquivo ou o código do manifesto pode conferir o documento em assina.app.br/verificar. A verificação mostra a situação, o título, as datas e o nome de quem assinou e quando. Ao verificar pelo arquivo, ele não sai do seu computador: só uma impressão digital dele (o hash) é enviada.",
+        ],
+      },
+      {
+        title: "Com quem compartilhamos",
+        paragraphs: [
+          "Só com os serviços que fazem o Assina funcionar: Google (login), Supabase (banco de dados), Cloudflare (armazenamento dos arquivos), Vercel (hospedagem) e Resend (envio de e-mails). Alguns ficam fora do Brasil, com garantias contratuais de proteção de dados. Não vendemos dados a ninguém e não os usamos para publicidade nem para treinar modelos de inteligência artificial.",
+          "Para medir o uso do produto, o Assina manda eventos ao Visão do Produto, ferramenta da própria DabLab. Eles não levam o conteúdo dos documentos, o título nem o nome, o e-mail ou outro dado de contato de quem assina; nos eventos de quem manda documentos, vai o e-mail da conta.",
+        ],
+      },
+      {
+        title: "Por quanto tempo",
+        paragraphs: [
+          `Os envelopes concluídos ficam guardados enquanto a sua conta existir. Os arquivos dos envelopes recusados, cancelados e expirados são apagados ${EXPURGO_ARQUIVOS_DIAS} dias depois de encerrados; o registro e a trilha ficam. Rascunhos sem mudança por ${RASCUNHO_ABANDONADO_DIAS} dias são apagados.`,
+          `Quem assinou consegue baixar o documento final pelo link do e-mail por ${DOWNLOAD_FINAL_DIAS} dias depois da conclusão.`,
+          "Quando você exclui a sua conta, apagamos do Assina os seus dados, os envelopes, os documentos e as trilhas. Ficam só os eventos de uso no Visão do Produto, com o e-mail da conta, e o registro de envio dos e-mails no serviço de e-mail; para apagá-los também, escreva para alexandre@dablab.com.br. As cópias de segurança do banco são substituídas com o tempo, pela rotina do provedor.",
+        ],
+      },
+      {
+        title: "Segurança",
+        paragraphs: [
+          "Os links de assinatura e os códigos por e-mail são guardados só como código embaralhado, a chave de API é guardada cifrada, o acesso aos dados é restrito ao servidor do Assina e todas as conexões usam HTTPS. Cada evento da trilha é encadeado ao anterior, o que mostra se algo foi alterado.",
+        ],
+      },
+      {
+        title: "Seus direitos",
+        paragraphs: [
+          "Pela LGPD, você pode pedir confirmação de que tratamos os seus dados, acesso, correção, exclusão, portabilidade e informações sobre o compartilhamento. Escreva para alexandre@dablab.com.br. Você também pode reclamar à Autoridade Nacional de Proteção de Dados (ANPD).",
+          "Quem manda documentos pode excluir a própria conta em Conta, no painel.",
+        ],
+      },
+      {
+        title: "Cookies",
+        paragraphs: [
+          `Usamos só cookies essenciais: o da sessão de quem entra no painel, o da sessão de quem está assinando (dura ${SESSAO_SIGNATARIO_S / 3600} horas) e um temporário, durante o login com o Google. Não usamos cookies de rastreamento nem de publicidade.`,
+        ],
+      },
+      {
+        title: "Mudanças",
+        paragraphs: ["Se esta política mudar de forma importante, avisaremos por e-mail ou no próprio Assina."],
+      },
+    ],
   },
   errors: {
     generic: "Algo deu errado. Nada foi alterado. Tente de novo.",
@@ -534,7 +736,3 @@ export type LoginErrorCode = keyof typeof copy.login.errors;
 export function isLoginErrorCode(value: unknown): value is LoginErrorCode {
   return typeof value === "string" && Object.hasOwn(copy.login.errors, value);
 }
-
-// Textos que explicam o que o Assina NÃO é (seção 20.1). Preenchido nos épicos 8.12 em diante.
-export const LEGAL_NEGATIVAS = {
-} as const;

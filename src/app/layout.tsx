@@ -1,5 +1,5 @@
 // Layout raiz: idioma pt-BR, tokens visuais (seção 16) e noindex por padrão (seção 17). As páginas
-// indexáveis (/, /verificar, /docs/api, /privacidade, /termos) sobrepõem quando existirem.
+// indexáveis (/, /verificar, /docs/api, /privacidade, /termos) sobrepõem com index: true.
 import type { Metadata } from "next";
 import { copy } from "@/lib/copy";
 import "./globals.css";

@@ -47,6 +47,11 @@ export function storage(): ArquivoStorage {
   return cached;
 }
 
+// Pasta de todos os arquivos de uma conta (exclusão da conta, seção 7.4).
+export function accountFolder(contaId: string): string {
+  return `${contaId}/`;
+}
+
 // Caminhos padronizados de um envelope (7.3). O original tem um caminho por versão: cada troca
 // grava um arquivo novo e o banco aponta para ele numa transação (as_fn_anexa_arquivo), então um
 // envio concorrente nunca vê o arquivo pela metade (princípio 2). Recebe: conta e envelope.

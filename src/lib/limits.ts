@@ -134,3 +134,10 @@ export const ANALYTICS_CLIENTE_MAX = 60; // assina_mcp_conectado.cliente (nome d
 export const ANALYTICS_NUMERO_MAX = 100_000; // teto de sanidade das contagens e horas: acima disso, o evento é descartado
 export const ANALYTICS_AMOSTRAS_EM_MEMORIA = 10_000; // credenciais lembradas pela amostragem antes de zerar o mapa
 export const ANALYTICS_ROTA_MAX = 100; // assina_api_chamada.rota
+
+// Retenção (regra 11.14; a faxina do 8.13 usa os mesmos números; os textos legais do 8.12 citam).
+export const EXPURGO_ARQUIVOS_DIAS = 90; // arquivos de recusados, cancelados e expirados, depois de encerrado_em
+export const RASCUNHO_ABANDONADO_DIAS = 30; // rascunho sem atualização é apagado por inteiro
+
+// Exclusão da conta (épico 8.12): o e-mail digitado na confirmação.
+export const EMAIL_CONFIRMACAO_MAX = 320;
