@@ -2,7 +2,7 @@
 // última, PDF final com campos, manifesto e selo, e-mails de conclusão, falhas e retentativas.
 import { createHash } from "node:crypto";
 import { PDFDocument } from "pdf-lib";
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FINALIZACAO_TENTATIVAS } from "@/lib/limits";
 import { db } from "@/server/db/client";
 import { setMailerForTests, type EmailMessage } from "@/server/email/mailer";
@@ -160,6 +160,25 @@ describe("finalização (épico 8.6)", () => {
     expect(await retryFinalizations({ contaIds: [env.contaId] })).toBe(0);
     expect((await envelope(env.id)).status).toBe("finalizando");
   });
+
+  // O relógio do servidor (Vercel) e o do banco (Supabase) não são o mesmo. A finalização não
+  // pode depender de os dois baterem ao milissegundo: com o servidor atrasado ou adiantado
+  // alguns segundos, ela conclui, e a data de conclusão nunca fica antes da última assinatura.
+  for (const skewMs of [-5_000, 5_000]) {
+    it(`relógio do servidor ${skewMs < 0 ? "atrasado" : "adiantado"} 5 s em relação ao banco: conclui mesmo assim`, async () => {
+      const env = await stuckInFinalizando();
+      vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + skewMs });
+      try {
+        expect(await finalizeEnvelope(env.id)).toBe("concluido");
+      } finally {
+        vi.useRealTimers();
+      }
+      const e = await envelope(env.id);
+      const { data: last } = await db().from("as_eventos").select("ocorrido_em").eq("envelope_id", env.id).eq("tipo", "assinou").single();
+      expect(e.status).toBe("concluido");
+      expect(new Date(e.concluido_em!).getTime()).toBeGreaterThanOrEqual(new Date(last!.ocorrido_em).getTime());
+    });
+  }
 
   it("a faxina conclui um envelope que falhou uma vez", async () => {
     const env = await stuckInFinalizando();
