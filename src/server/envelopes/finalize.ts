@@ -97,7 +97,10 @@ async function buildFinal(envelopeId: string, reserva: string) {
     if (ev.ator === "remetente") return e.as_contas.nome;
     return ev.ator === "api" ? copy.manifest.actors.api : ev.ator === "mcp" ? copy.manifest.actors.mcp : copy.manifest.actors.sistema;
   };
-  const concluidoEm = new Date();
+  // A conclusão nunca fica antes do último fato da trilha (relógio do banco): o relógio do
+  // servidor pode estar atrasado em relação ao do banco (bug do 8.13). O banco aceita até 1 min à frente.
+  const lastFact = Math.max(...events!.map((ev) => new Date(ev.ocorrido_em).getTime()), ...assinantes.map((s) => new Date(s.assinado_em!).getTime()));
+  const concluidoEm = new Date(Math.max(Date.now(), lastFact));
   const data: ManifestData = {
     titulo: e.titulo,
     remetente: { nome: e.as_contas.nome, email: e.as_contas.email },
