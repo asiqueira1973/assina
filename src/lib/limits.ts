@@ -141,3 +141,9 @@ export const RASCUNHO_ABANDONADO_DIAS = 30; // rascunho sem atualização é apa
 
 // Exclusão da conta (épico 8.12): o e-mail digitado na confirmação.
 export const EMAIL_CONFIRMACAO_MAX = 320;
+
+// Faxina diária (épico 8.13).
+export const FAXINA_LEMBRETE_FOLGA_MIN = 60; // regra 11.5: a faxina roda no mesmo horário; a folga evita perder um dia por segundos
+export const LEMBRETE_PRESO_MIN = 60; // lembrete reservado e nunca confirmado nem desfeito (queda no meio) vira "falhou"
+export const FAXINA_LOTE = 200; // máximo de linhas por tarefa em cada execução (o resto fica para o dia seguinte)
+export const OAUTH_CLIENTE_ORFAO_DIAS = 7; // cliente OAuth registrado sem nenhuma conexão nem código é apagado depois disso

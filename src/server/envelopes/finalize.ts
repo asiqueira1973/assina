@@ -17,7 +17,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { PDFDocument } from "pdf-lib";
 import { copy } from "@/lib/copy";
-import { ASSINATURA_PNG_MAX_BYTES, FINALIZACAO_TENTATIVAS, LIMITE_ARQUIVO_BYTES } from "@/lib/limits";
+import { ASSINATURA_PNG_MAX_BYTES, FAXINA_LOTE, FINALIZACAO_TENTATIVAS, LIMITE_ARQUIVO_BYTES } from "@/lib/limits";
 import { track } from "@/server/analytics/client";
 import { db } from "@/server/db/client";
 import { errorCode } from "@/server/error-code";
@@ -208,7 +208,7 @@ async function safeNotice(chave: string) {
 // 'finalizando'. A reserva decide: tenta se há tentativa sobrando, ou manda o alerta que faltou
 // quando a última caiu sem registrar falha. Recebe: contas a limitar (testes). Devolve: quantos concluíram.
 export async function retryFinalizations(opts: { contaIds?: string[] } = {}): Promise<number> {
-  let q = db().from("as_envelopes").select("id").eq("status", "finalizando");
+  let q = db().from("as_envelopes").select("id").eq("status", "finalizando").order("atualizado_em").limit(FAXINA_LOTE);
   if (opts.contaIds) q = q.in("conta_id", opts.contaIds);
   const { data, error } = await q;
   if (error) throw error;

@@ -133,3 +133,16 @@ export function canceledRecipientEmail(p: { titulo: string; motivo: string | nul
     text: [subject, "", ...lines, "", copy.email.footer].join("\n"),
   };
 }
+
+// Aviso ao remetente: o prazo acabou (expirado_remetente, regra 11.7), com quem assinou e quem não
+// assinou, e o botão para o detalhe.
+export function expiredSenderEmail(p: { titulo: string; assinaram: string[]; faltaram: string[]; link: string }): RenderedEmail {
+  const x = copy.emailNotices.expired;
+  const subject = x.subject(p.titulo);
+  const lines = [p.assinaram.length ? x.signed(p.assinaram.join(", ")) : x.nobodySigned, ...(p.faltaram.length ? [x.pending(p.faltaram.join(", "))] : [])];
+  return {
+    subject,
+    html: layout(subject, lines.map(esc), { label: copy.emailNotices.completed.detail, url: p.link }),
+    text: [subject, "", ...lines, "", `${copy.emailNotices.completed.detail}: ${p.link}`, "", copy.email.footer].join("\n"),
+  };
+}

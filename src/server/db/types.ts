@@ -440,9 +440,20 @@ isOneToOne: false
 "as_fn_exclui_envelope":
 { Args: { "p_conta_id": string,"p_envelope_id": string,"p_titulo": string }; Returns: undefined
                            },
+"as_fn_expira_envelope":
+{ Args: { "p_envelope_id": string }; Returns: boolean
+                           },
+"as_fn_expurga_envelope":
+{ Args: { "p_dias": number,"p_envelope_id": string }; Returns: boolean
+                           },
 "as_fn_falha_finalizacao":
 { Args: { "p_definitiva"?: boolean,"p_envelope_id": string,"p_erro": string,"p_max_tentativas": number,"p_reserva": string }; Returns: {
               "alerta": boolean,"tentativas": number
+            }[]
+                           },
+"as_fn_lembretes_devidos":
+{ Args: { "p_contas"?: (string)[],"p_folga_min": number,"p_max": number }; Returns: {
+              "cada_dias": number,"conta_id": string,"envelope_id": string,"signatario_id": string
             }[]
                            },
 "as_fn_lista_envelopes":

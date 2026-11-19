@@ -10,7 +10,7 @@
 // O segredo fica cifrado em as_contas (AES-256-GCM); nada de URL, segredo ou corpo em log.
 import "server-only";
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
-import { WEBHOOK_RESPOSTA_MAX, WEBHOOK_TENTATIVAS, WEBHOOK_TIMEOUT_MS } from "@/lib/limits";
+import { FAXINA_LOTE, WEBHOOK_RESPOSTA_MAX, WEBHOOK_TENTATIVAS, WEBHOOK_TIMEOUT_MS } from "@/lib/limits";
 import { decryptSecret } from "@/server/crypto/aes";
 import { db } from "@/server/db/client";
 import { errorCode } from "@/server/error-code";
@@ -92,8 +92,9 @@ export async function deliverEnvelopeWebhooks(envelopeId: string): Promise<void>
 }
 
 // Reentrega as pendentes e as que falharam com tentativa sobrando (faxina, regra 11.17).
-// Recebe: contas a limitar (testes). Devolve: quantas foram entregues.
-export async function retryWebhooks(opts: { contaIds?: string[] } = {}): Promise<number> {
+// Recebe: contas a limitar (testes) e, da faxina, o início da execução (a entrega criada nela já
+// teve a tentativa imediata: uma por execução, regra 11.17). Devolve: quantas foram entregues.
+export async function retryWebhooks(opts: { contaIds?: string[]; criadasAntesDe?: string } = {}): Promise<number> {
   // Só de contas ativas que ainda têm webhook: sem URL (ou suspensa), a entrega não tem para onde ir (e "pulada" não
   // conta tentativa, então a faxina a pegaria para sempre).
   let q = db()
@@ -103,8 +104,10 @@ export async function retryWebhooks(opts: { contaIds?: string[] } = {}): Promise
     .lt("tentativas", WEBHOOK_TENTATIVAS)
     .not("as_contas.webhook_url", "is", null)
     .is("as_contas.suspensa_em", null)
-    .order("criado_em");
+    .order("criado_em")
+    .limit(FAXINA_LOTE);
   if (opts.contaIds) q = q.in("conta_id", opts.contaIds);
+  if (opts.criadasAntesDe) q = q.lt("criado_em", opts.criadasAntesDe);
   const { data, error } = await q;
   if (error) throw error;
   let done = 0;

@@ -2,7 +2,7 @@
 
 Assinatura eletrônica de documentos PDF, grátis e em português: suba um PDF, diga quem assina e receba de volta o documento assinado, selado e com a trilha de auditoria. Com API REST e servidor MCP para sistemas e agentes. Um produto [DabLab](https://dablab.com.br) em [assina.app.br](https://assina.app.br).
 
-**Status:** em implementação. Épicos 8.0 (guardrails) e 8.1 (fundação: banco, login com Google, boas-vindas) prontos; ver `plans/`.
+**Status:** MVP implementado (épicos 8.0 a 8.13, ver `plans/`), rodando no Supabase local. Antes do lançamento faltam os passos de conta e console da DabLab em [`PENDENCIAS.md`](PENDENCIAS.md): migrations no remoto, R2, Google, Resend, selo, Vercel e revisão jurídica.
 
 | Arquivo | O que é |
 |---|---|
@@ -11,6 +11,8 @@ Assinatura eletrônica de documentos PDF, grátis e em português: suba um PDF, 
 | [`CLAUDE.md`](CLAUDE.md) | Guia para sessões do Claude Code neste repositório |
 | [`modelo-assina.dbml`](modelo-assina.dbml) | Modelo de dados para o dbdiagram.io |
 | [`prompt-design-assina.md`](prompt-design-assina.md) | Prompt das telas para o Claude Design |
+| [`PENDENCIAS.md`](PENDENCIAS.md) | O que depende de conta, console ou decisão do Alexandre |
+| [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) | Referência funcional e componentes de terceiros |
 
 ## Rodar localmente
 
@@ -23,11 +25,26 @@ cp .env.example .env.local     # e preencha (ver abaixo)
 npm run dev                    # http://localhost:3030
 ```
 
-Em `.env.local`:
+Em dev, sem R2 e sem Resend, os arquivos vão para `.armazenamento-local/` e os e-mails para `.caixa-de-saida-local/` (um `.txt` e um `.html` por e-mail). Em produção, sem R2 ou sem Resend, o app falha de propósito.
 
-- `SUPABASE_SERVICE_ROLE_KEY`: valor `SERVICE_ROLE_KEY` de `supabase status -o env`.
-- `SESSION_SECRET`, `CHAVES_ENC_KEY`, `CRON_SECRET`: cada um com `openssl rand -base64 32`.
-- `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET`: ver "Google Cloud" abaixo.
+### Variáveis de ambiente
+
+Todas no `.env.local` em dev e nas variáveis da Vercel em produção. Só `NEXT_PUBLIC_SITE_URL` é pública; o resto é segredo de servidor.
+
+| Variável | Para quê | Como obter |
+|---|---|---|
+| `NEXT_PUBLIC_SITE_URL` | Endereço do site: links dos e-mails, OAuth, metadados do MCP, sitemap | `http://localhost:3030` em dev; `https://assina.app.br` em produção |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Banco (service role; RLS sem políticas) | `supabase status -o env` em dev; painel do Supabase em produção |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Login | Seção "Google Cloud" |
+| `SESSION_SECRET` | Assina o cookie da sessão | `openssl rand -base64 32` |
+| `CHAVES_ENC_KEY` | Cifra a chave de API e o segredo do webhook (AES-256-GCM) | `openssl rand -base64 32`. Trocar invalida as chaves guardadas |
+| `CRON_SECRET` | Protege `/api/cron/diario` (a Vercel manda sozinha no cron) | `openssl rand -base64 32` |
+| `EMAILS_PERMITIDOS`, `EMAILS_BLOQUEADOS`, `CONTAS_NOVAS_POR_DIA` | Proteções da regra 11.12: com a lista de permitidos preenchida, só quem está nela entra; os bloqueados nunca entram; contas novas por dia (padrão 50) | Listas separadas por vírgula |
+| `ADMIN_EMAIL` | Recebe o alerta de finalização que falhou 3 vezes | E-mail da DabLab |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Arquivos | Seção "Cloudflare R2" |
+| `RESEND_API_KEY`, `EMAIL_REMETENTE` | E-mails | Seção "Resend e DNS" |
+| `SELO_P12_BASE64`, `SELO_P12_SENHA`, `SELO_TSA_URL` | Selo do PDF final | Seção "Selo do PDF final" |
+| `VISAO_INGEST_URL`, `VISAO_API_KEY` | Eventos de uso (opcional) | Seção "Analytics no Visão do Produto" |
 
 Se o Postgres local travar ou cancelar por timeout (`57014`), confira se outro Supabase local está ligado (`docker ps`) e pare-o: dois ao mesmo tempo sufocam o Docker.
 
@@ -54,7 +71,7 @@ O Assina pede só `openid email profile`: escopos não sensíveis, sem verifica�
    - Nome do app: `Assina`; e-mail de suporte: `alexandre@dablab.com.br`.
    - Público: **Externo**.
    - Contato do desenvolvedor: `alexandre@dablab.com.br`.
-3. **Marca** (Branding): página inicial `https://assina.app.br`, política de privacidade `https://assina.app.br/privacidade`, termos `https://assina.app.br/termos`, domínio autorizado `assina.app.br`. Essas páginas chegam no épico 8.12; até lá, deixe para depois a verificação da marca.
+3. **Marca** (Branding): página inicial `https://assina.app.br`, política de privacidade `https://assina.app.br/privacidade`, termos `https://assina.app.br/termos`, domínio autorizado `assina.app.br`. As três páginas existem desde o épico 8.12 e só respondem depois do deploy.
 4. **Acesso a dados** (escopos): só `openid`, `.../auth/userinfo.email` e `.../auth/userinfo.profile`. Nenhum escopo sensível.
 5. **Público** → **Publicar app** (status "Em produção"). Com escopos básicos não há revisão do Google nem limite de 100 usuários de teste.
 6. **Clientes** → **Criar cliente** → tipo **Aplicativo da Web**, nome `Assina web`:
@@ -73,6 +90,21 @@ O Assina pede só `openid email profile`: escopos não sensíveis, sem verifica�
 
 3. **R2 → Gerenciar tokens de API → Criar token**: permissão **Leitura e gravação de objetos**, restrito ao bucket `assina-documentos`.
 4. Copie para `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` e `R2_BUCKET`.
+
+## Resend e DNS (e-mails)
+
+O remetente técnico é `naoresponda@assina.app.br`, com o nome "{remetente} via Assina" e o `reply-to` de quem mandou o documento (seção 15.2).
+
+1. [resend.com](https://resend.com) (conta DabLab) → **Domains → Add domain** → `assina.app.br`, região São Paulo (`sa-east-1`).
+2. No DNS do `assina.app.br`, crie os registros que o Resend mostrar. Os nomes e valores exatos vêm do painel:
+   - **SPF:** um `MX` e um `TXT` no subdomínio de envio que ele indicar (por exemplo, `send`);
+   - **DKIM:** um `TXT` em `resend._domainkey`;
+   - **DMARC:** um `TXT` em `_dmarc` com `v=DMARC1; p=none; rua=mailto:alexandre@dablab.com.br`. Depois de algumas semanas sem falhas, passe para `p=quarantine`.
+3. Espere o domínio ficar **Verified** no Resend.
+4. **API Keys → Create API key**, com permissão **Sending access** restrita ao domínio. Ponha em `RESEND_API_KEY`, e `EMAIL_REMETENTE=naoresponda@assina.app.br`.
+5. Para conferir, mande um envelope de teste para um e-mail seu e veja no Gmail, em "Mostrar original", se SPF, DKIM e DMARC aparecem como `PASS`.
+
+O plano grátis do Resend tem limite diário de envios; a decisão sobre o plano pago é a pergunta 25.4 do spec.
 
 ## Selo do PDF final (épico 8.6)
 
@@ -187,6 +219,31 @@ Os eventos da seção 21 do spec (`assina_*`) saem do servidor para o Visão do 
 
    Sem as duas, nada é enviado.
 3. Faça um envelope de teste ponta a ponta e confira em **Atividade**: `assina_envelope_criado`, `assina_envelope_enviado`, `assina_documento_assinado` e `assina_envelope_concluido`.
+
+## Deploy na Vercel e faxina diária (épico 8.13)
+
+1. **Projeto.** Importe `asiqueira1973/assina` na Vercel (conta DabLab). O framework é detectado como Next.js. Domínio: `assina.app.br`.
+2. **Variáveis.** Copie todas as da tabela "Variáveis de ambiente" em **Production**, com `NEXT_PUBLIC_SITE_URL=https://assina.app.br`.
+3. **Banco.** As migrations entram no Supabase remoto pelo MCP (seção "Banco"), antes do primeiro deploy.
+4. **Cron.** O `vercel.json` agenda `GET /api/cron/diario` todo dia às 09:00 UTC (06:00 em Brasília). Com `CRON_SECRET` definido, a Vercel manda `Authorization: Bearer {CRON_SECRET}` sozinha. Sem o segredo certo, a rota responde 401.
+
+A faxina faz, nesta ordem, e rodar duas vezes não reenvia nada:
+1. expira os envelopes vencidos, avisa o remetente e entrega o webhook `envelope.expirado`;
+2. manda os lembretes automáticos (a cada 2, 3 ou 7 dias, até 10 por pessoa);
+3. retenta as finalizações paradas (até 3 tentativas no total);
+4. retenta convites e avisos que falharam (até 5 tentativas);
+5. retenta os webhooks (até 6 tentativas);
+6. apaga os arquivos de recusados, cancelados e expirados encerrados há 90 dias;
+7. apaga rascunhos parados há 30 dias;
+8. apaga códigos OAuth vencidos e clientes OAuth sem nenhuma conexão há 7 dias.
+
+A resposta traz a contagem de cada tarefa. Para rodar à mão:
+
+```bash
+curl -s -H "Authorization: Bearer $CRON_SECRET" https://assina.app.br/api/cron/diario
+```
+
+**Cabeçalhos de segurança.** Toda resposta leva `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` e `Referrer-Policy` (`next.config.ts`). A CSP libera `https://*.r2.cloudflarestorage.com` para o upload e para o pdf.js ler o PDF. Se o R2 passar a usar outro domínio, ajuste lá.
 
 ## Vercel Firewall (limites por IP)
 

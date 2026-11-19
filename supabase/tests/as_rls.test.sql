@@ -3,7 +3,7 @@
 -- servidor com service role).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(187);
+select plan(195);
 
 select ok(c.relrowsecurity, 'RLS ligado em ' || c.relname)
 from pg_class c join pg_namespace n on n.oid = c.relnamespace

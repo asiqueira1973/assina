@@ -497,7 +497,9 @@ begin
   if p_caminho is distinct from v_e.conta_id || '/' || v_e.id || '/final-' || p_reserva || '.pdf' then
     raise exception 'caminho_invalido';
   end if;
-  if p_concluido_em is null or p_concluido_em > now() or p_concluido_em < v_e.enviado_em then
+  -- Tolerância de 1 minuto no futuro: o servidor (Vercel) e o banco têm relógios diferentes.
+  -- O piso continua: nunca antes do envio (o servidor já parte da última data da trilha).
+  if p_concluido_em is null or p_concluido_em > now() + interval '1 minute' or p_concluido_em < v_e.enviado_em then
     raise exception 'data_invalida';
   end if;
 
@@ -566,7 +568,7 @@ begin
     raise exception 'nao_encontrado';
   end if;
   perform public.as_fn_registra_evento(p_envelope_id, 'lembrete_enviado', p_ator, p_signatario_id, p_ip, p_user_agent,
-    jsonb_build_object('canal', 'manual'));
+    jsonb_build_object('canal', case when p_ator = 'sistema' then 'automatico' else 'manual' end));
   return v_trocou;
 end;
 $$;
@@ -970,6 +972,72 @@ $$;
 ALTER FUNCTION "public"."as_fn_exclui_envelope"("p_conta_id" "uuid", "p_envelope_id" "uuid", "p_titulo" "text") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."as_fn_expira_envelope"("p_envelope_id" "uuid") RETURNS boolean
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+declare
+  v_e public.as_envelopes;
+  v_webhook text;
+begin
+  select * into v_e from public.as_envelopes where id = p_envelope_id for update;
+  if v_e.id is null or v_e.status <> 'enviado' or v_e.prazo_em is null or v_e.prazo_em > now() then
+    return false;
+  end if;
+  if not public.as_fn_transicao_envelope(p_envelope_id, 'enviado', 'expirado') then
+    return false;
+  end if;
+  update public.as_envelopes set encerrado_em = now() where id = p_envelope_id;
+  perform public.as_fn_registra_evento(p_envelope_id, 'expirado', 'sistema', null, null, null, '{}');
+
+  insert into public.as_notificacoes (conta_id, envelope_id, tipo, chave)
+  values (v_e.conta_id, p_envelope_id, 'expirado_remetente', 'expirado_remetente:' || p_envelope_id)
+  on conflict (chave) do nothing;
+
+  select webhook_url into v_webhook from public.as_contas where id = v_e.conta_id;
+  if v_webhook is not null then
+    insert into public.as_entregas_webhook (conta_id, envelope_id, evento, corpo)
+    values (v_e.conta_id, p_envelope_id, 'envelope.expirado', jsonb_build_object(
+      'evento', 'envelope.expirado',
+      'envelope', jsonb_build_object('id', v_e.id, 'status', 'expirado', 'titulo', v_e.titulo, 'codigo_verificacao', v_e.codigo_verificacao,
+        'concluido_em', null, 'hash_final', null),
+      'ocorrido_em', now()
+    ));
+  end if;
+  return true;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."as_fn_expira_envelope"("p_envelope_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."as_fn_expurga_envelope"("p_envelope_id" "uuid", "p_dias" integer) RETURNS boolean
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  update public.as_envelopes
+     set arquivos_expurgados_em = now(), arquivo_original_path = null
+   where id = p_envelope_id
+     and status in ('recusado', 'cancelado', 'expirado')
+     and encerrado_em <= now() - make_interval(days => p_dias)
+     and arquivos_expurgados_em is null;
+  if not found then
+    return false;
+  end if;
+  update public.as_signatarios
+     set assinatura_imagem_path = null, rubrica_imagem_path = null
+   where envelope_id = p_envelope_id
+     and (assinatura_imagem_path is not null or rubrica_imagem_path is not null);
+  return true;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."as_fn_expurga_envelope"("p_envelope_id" "uuid", "p_dias" integer) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."as_fn_falha_finalizacao"("p_envelope_id" "uuid", "p_reserva" "uuid", "p_erro" "text", "p_max_tentativas" integer, "p_definitiva" boolean DEFAULT false) RETURNS TABLE("tentativas" integer, "alerta" boolean)
     LANGUAGE "plpgsql"
     SET "search_path" TO ''
@@ -1085,6 +1153,32 @@ $$;
 ALTER FUNCTION "public"."as_fn_final_imutavel"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."as_fn_lembretes_devidos"("p_max" integer, "p_folga_min" integer, "p_contas" "uuid"[] DEFAULT NULL::"uuid"[]) RETURNS TABLE("conta_id" "uuid", "envelope_id" "uuid", "signatario_id" "uuid", "cada_dias" smallint)
+    LANGUAGE "sql" STABLE
+    SET "search_path" TO ''
+    AS $$
+  select e.conta_id, e.id, s.id, e.lembrete_cada_dias
+    from public.as_envelopes e
+    join public.as_signatarios s on s.envelope_id = e.id
+    join public.as_contas c on c.id = e.conta_id
+   where e.status = 'enviado'
+     and e.lembrete_cada_dias is not null
+     and e.prazo_em > now()
+     and c.suspensa_em is null
+     and s.papel = 'assinar'
+     and s.status = 'aguardando'
+     and s.lembretes_enviados < p_max
+     and greatest(s.notificado_em, s.ultimo_lembrete_em) is not null
+     and greatest(s.notificado_em, s.ultimo_lembrete_em)
+         <= now() - make_interval(days => e.lembrete_cada_dias) + make_interval(mins => p_folga_min)
+     and (p_contas is null or e.conta_id = any (p_contas))
+   order by e.id, s.ordem;
+$$;
+
+
+ALTER FUNCTION "public"."as_fn_lembretes_devidos"("p_max" integer, "p_folga_min" integer, "p_contas" "uuid"[]) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."as_fn_lista_envelopes"("p_conta_id" "uuid", "p_filtro" "text", "p_busca" "text", "p_limite" integer, "p_deslocamento" integer) RETURNS TABLE("id" "uuid", "titulo" "text", "status" "public"."as_status_envelope", "criado_em" timestamp with time zone, "enviado_em" timestamp with time zone, "concluido_em" timestamp with time zone, "encerrado_em" timestamp with time zone, "assinaram" integer, "assinantes" integer, "total" bigint)
     LANGUAGE "sql" STABLE
     SET "search_path" TO ''
@@ -1173,6 +1267,22 @@ $$;
 
 
 ALTER FUNCTION "public"."as_fn_novo_codigo"("p_signatario_id" "uuid", "p_codigo_hash" "text", "p_validade_s" integer, "p_intervalo_s" integer, "p_max_hora" integer) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."as_fn_rascunho_tocado"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  update public.as_envelopes set atualizado_em = now()
+   where id = case when tg_op = 'DELETE' then old.envelope_id else new.envelope_id end
+     and status = 'rascunho';
+  return null;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."as_fn_rascunho_tocado"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."as_fn_recusa"("p_signatario_id" "uuid", "p_token_hash" "text", "p_motivo" "text", "p_ip" "inet" DEFAULT NULL::"inet", "p_user_agent" "text" DEFAULT NULL::"text") RETURNS "text"
@@ -2225,6 +2335,14 @@ CREATE OR REPLACE TRIGGER "as_tg_final_imutavel" BEFORE UPDATE ON "public"."as_e
 
 
 
+CREATE OR REPLACE TRIGGER "as_tg_rascunho_tocado" AFTER INSERT OR DELETE OR UPDATE ON "public"."as_campos" FOR EACH ROW EXECUTE FUNCTION "public"."as_fn_rascunho_tocado"();
+
+
+
+CREATE OR REPLACE TRIGGER "as_tg_rascunho_tocado" AFTER INSERT OR DELETE OR UPDATE ON "public"."as_signatarios" FOR EACH ROW EXECUTE FUNCTION "public"."as_fn_rascunho_tocado"();
+
+
+
 CREATE OR REPLACE TRIGGER "as_tg_valida_campo" BEFORE INSERT OR UPDATE ON "public"."as_campos" FOR EACH ROW EXECUTE FUNCTION "public"."as_fn_valida_campo"();
 
 
@@ -2471,6 +2589,16 @@ GRANT ALL ON FUNCTION "public"."as_fn_exclui_envelope"("p_conta_id" "uuid", "p_e
 
 
 
+REVOKE ALL ON FUNCTION "public"."as_fn_expira_envelope"("p_envelope_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_expira_envelope"("p_envelope_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."as_fn_expurga_envelope"("p_envelope_id" "uuid", "p_dias" integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_expurga_envelope"("p_envelope_id" "uuid", "p_dias" integer) TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."as_fn_falha_finalizacao"("p_envelope_id" "uuid", "p_reserva" "uuid", "p_erro" "text", "p_max_tentativas" integer, "p_definitiva" boolean) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."as_fn_falha_finalizacao"("p_envelope_id" "uuid", "p_reserva" "uuid", "p_erro" "text", "p_max_tentativas" integer, "p_definitiva" boolean) TO "service_role";
 
@@ -2486,6 +2614,11 @@ GRANT ALL ON FUNCTION "public"."as_fn_final_imutavel"() TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."as_fn_lembretes_devidos"("p_max" integer, "p_folga_min" integer, "p_contas" "uuid"[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_lembretes_devidos"("p_max" integer, "p_folga_min" integer, "p_contas" "uuid"[]) TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."as_fn_lista_envelopes"("p_conta_id" "uuid", "p_filtro" "text", "p_busca" "text", "p_limite" integer, "p_deslocamento" integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."as_fn_lista_envelopes"("p_conta_id" "uuid", "p_filtro" "text", "p_busca" "text", "p_limite" integer, "p_deslocamento" integer) TO "service_role";
 
@@ -2493,6 +2626,11 @@ GRANT ALL ON FUNCTION "public"."as_fn_lista_envelopes"("p_conta_id" "uuid", "p_f
 
 REVOKE ALL ON FUNCTION "public"."as_fn_novo_codigo"("p_signatario_id" "uuid", "p_codigo_hash" "text", "p_validade_s" integer, "p_intervalo_s" integer, "p_max_hora" integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."as_fn_novo_codigo"("p_signatario_id" "uuid", "p_codigo_hash" "text", "p_validade_s" integer, "p_intervalo_s" integer, "p_max_hora" integer) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."as_fn_rascunho_tocado"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_rascunho_tocado"() TO "service_role";
 
 
 

@@ -180,6 +180,13 @@ export const copy = {
       body: "Não é mais preciso assinar.",
       reason: (motivo: string) => `Motivo: ${motivo}`,
     },
+    // Seção 15.2: expirado_remetente ("quem assinou e quem não assinou"; épico 8.13).
+    expired: {
+      subject: (titulo: string) => `Prazo encerrado: ${titulo}`,
+      signed: (nomes: string) => `Assinaram: ${nomes}.`,
+      pending: (nomes: string) => `Não assinaram: ${nomes}.`,
+      nobodySigned: "Ninguém assinou.",
+    },
     // Seção 15.2: concluido_destinatario e concluido_remetente.
     completed: {
       subject: (titulo: string) => `Concluído: ${titulo}`,

@@ -9,7 +9,7 @@ Se um teste falhar, corrija o código, não o teste; nunca pule nem apague teste
 Bug: teste que reproduz → ver falhar → commit → `touch .claude/fix-mode` → corrigir → `rm .claude/fix-mode`.
 
 ## Estado
-Épicos 8.0 a 8.12 (rascunho, upload, editor de campos, envio, assinatura, finalização com manifesto e selo, painel, verificação pública, API REST, webhooks, MCP e OAuth, analytics, página inicial, páginas legais, suspensão e exclusão da conta) concluídos. Migrations aplicadas só no **local**; pendências do Alexandre em `PENDENCIAS.md`. Próximo: 8.13 (faxina diária, documentação e entrega). E-mail em dev vai para `.caixa-de-saida-local/`.
+Épicos 8.0 a 8.13 concluídos: o MVP inteiro (até a faxina diária, a CSP e a documentação de entrega). Migrations aplicadas só no **local**; pendências do Alexandre em `PENDENCIAS.md`. Próximo: as pendências de conta e console de `PENDENCIAS.md` e as decisões 25.x, antes do lançamento. E-mail em dev vai para `.caixa-de-saida-local/`.
 
 ## Convenções (seção 18)
 - Banco em português `snake_case`, **sempre com prefixo `as_`** (projeto Supabase compartilhado `jeesdmfcrmhyufwzwzwt`). Código, variáveis e arquivos em inglês; fronteira em `src/server/db/`.
@@ -46,4 +46,6 @@ Bug: teste que reproduz → ver falhar → commit → `touch .claude/fix-mode` �
 - Enquanto os hooks do Assina não disparam na sessão (PENDENCIAS P4), os guardas rodam à mão, e um bloqueio tem de **impedir o commit** (`[ "$n" -eq 0 ] && git commit …`). No 8.8, um bloqueio do `guard-secrets` (componente de cliente importando tipo de `src/server/`) passou porque o commit vinha encadeado depois da varredura. Tipos usados pelo cliente moram fora de `src/server/` (ex.: `src/features/verify/types.ts`).
 - Fetch para URL de fora (arquivo_url, webhook) só por `src/server/files/fetch-remote.ts` (SSRF); a exceção é o POST ao Visão do Produto, cuja URL vem do operador. Nos testes, `setRemoteFetchTestMode(true)` libera loopback, http e certificado autoassinado (`tests/https-server.ts`); o banco só aceita webhook `https://`.
 - Analytics só por `track()` (`src/server/analytics/client.ts`), que não espera nem lança; propriedade nova entra no esquema `.strict()` de `events.ts` (o que não está lá é descartado). Teste: `setAnalyticsSinkForTests` + `flushAnalytics()`. O `tests/setup.ts` apaga `VISAO_*`.
+- O relógio do servidor e o do banco não são o mesmo (no Mac, o Docker fica cerca de 100 ms à frente). Data gravada pelo servidor e comparada com `now()` do banco precisa de folga ou de partir de uma data do banco (bug do `concluido_em` no 8.13).
+- Origem externa nova no navegador (outro domínio do R2, uma fonte, um script) → ajuste a CSP em `next.config.ts`, senão a página quebra só em produção.
 - Quando o agente errar a mesma coisa duas vezes, a correção entra aqui.

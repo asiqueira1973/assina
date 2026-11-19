@@ -4,7 +4,7 @@ Descreve o sistema **como está implementado**, não como foi planejado (spec.md
 
 | | |
 |---|---|
-| Estado | Épicos 8.0 a 8.12 concluídos em 17/11/2026. Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
+| Estado | Épicos 8.0 a 8.13 concluídos em 18/11/2026 (MVP completo no local). Migrations aplicadas no **Supabase local**; o remoto compartilhado aguarda (`PENDENCIAS.md`, P1) |
 | Stack | Next.js 16.4.6 (App Router, Cache Components, `proxy.ts`), React 19.3, TypeScript, Supabase Postgres (projeto compartilhado, prefixo `as_`), Vitest, pgTAP |
 
 ---
@@ -98,7 +98,11 @@ Fonte: `supabase/migrations/20261117130100_as_logica.sql`. Toda função com `se
 | `as_tg_webhook_assinou` | trigger | signatários → entregas | assinar | `signatario.assinou` na mesma transação |
 | `as_fn_reserva_entrega` | função | entregas | webhooks | um envio por vez, até 6 tentativas |
 | `as_fn_cria_codigo_oauth` · `as_fn_troca_codigo_oauth` | funções | códigos OAuth, credenciais | OAuth do MCP | código com redirect exato e PKCE; troca transacional pelo token `mcp` |
-| `as_fn_conclui_envelope` | função | envelope, trilha, notificações, webhooks | finalizar | `finalizando → concluido` com hash, selo e caminho; eventos `finalizado` e `concluido`; e-mails de conclusão e webhook na mesma transação |
+| `as_fn_conclui_envelope` | função | envelope, trilha, notificações, webhooks | finalizar | `finalizando → concluido` com hash, selo e caminho; eventos `finalizado` e `concluido`; e-mails de conclusão e webhook na mesma transação. Aceita `concluido_em` até 1 min à frente do `now()` (8.13, divergência 60) |
+| `as_fn_expira_envelope` | função | envelope, trilha, notificações, webhooks | faxina | `enviado` vencido → `expirado`, evento `expirado`, aviso `expirado_remetente` e webhook `envelope.expirado`; idempotente |
+| `as_fn_lembretes_devidos` | função | envelopes, signatários, contas | faxina | quem deve receber o lembrete automático hoje (regra 11.5) |
+| `as_fn_expurga_envelope` | função | envelope, signatários | faxina | marca o expurgo dos arquivos (regra 11.14) e esquece os caminhos |
+| `as_tg_rascunho_tocado` (`as_fn_rascunho_tocado`) | trigger AFTER INSERT/UPDATE/DELETE | `as_signatarios`, `as_campos` → `as_envelopes` | edição do rascunho | renova `atualizado_em` do envelope em rascunho (a faxina só apaga rascunho parado de verdade) |
 | `as_fn_falha_finalizacao` | função | envelope, notificações | finalizar | registra a falha só da própria reserva; na 3ª tentativa (ou na `integridade_violada`), alerta ao admin |
 | `as_tg_final_imutavel` | trigger | `as_envelopes` | — | o resultado da finalização não se reescreve |
 | `as_fn_entra_conta` | função | `as_contas`, `as_credenciais` | login | cria a conta já com a chave de API, na mesma transação; conta existente atualiza só o e-mail; suspensa não é tocada |
@@ -154,6 +158,7 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | `GET /api/final/{signatario_id}.{hmac}` (link do e-mail de conclusão acima de 7 MB) | signatário, envelope, conta | `as_eventos` (`baixou_final`) | `readFinalDownloadKey` (HMAC); 30 dias depois de `concluido_em` |
 | Finalização (servidor, sem tela) | envelope, signatários, campos, trilha; original e imagens no armazenamento | `final.pdf` no armazenamento; via `as_fn_conclui_envelope` / `as_fn_falha_finalizacao` | `finalizeEnvelope`, `retryFinalizations` |
 | `GET /api/assinar/{token}/documento` | `as_envelopes` | `as_eventos` (`baixou_final`) | sessão para o original; só o link para o final (até 30 dias) |
+| `GET /api/cron/diario` (cron da Vercel, Bearer `CRON_SECRET`) | envelopes, signatários, notificações, entregas, códigos e clientes OAuth | as mesmas, mais os arquivos (expurgo, rascunhos) | `runDailyCleanup` (`src/server/cron.ts`) |
 | `PUT/GET /api/dev/arquivos/{caminho}` (só dev) | arquivo local | arquivo local | HMAC + validade; 404 em produção ou com R2 |
 
 ## 5. Lógica por tela
@@ -253,6 +258,18 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
     - `rotateApiKey`, `saveWebhookUrl` (com URL), `exchangeCode`;
     - `apiRoute` e `/mcp` (`trackApiCall`: amostra de 1 a cada 10 s por credencial, por instância, e rota como padrão, em que segmento desconhecido vira `{id}`).
   - **Ficam para a faxina do 8.13:** `envelope_expirado` e o lembrete automático.
+- **Faxina diária (épico 8.13, `src/server/cron.ts`):** `GET /api/cron/diario` (Bearer `CRON_SECRET`, comparado pelo SHA-256 em tempo constante; `vercel.json` às 09:00 UTC; `maxDuration` 300 s) chama `runDailyCleanup`, que roda em ordem, cada tarefa com o próprio `try` (o log leva só o nome da tarefa e o código):
+  1. expira (`as_fn_expira_envelope` por envelope; depois do commit, o aviso `expirado_remetente`, os webhooks e o evento `assina_envelope_expirado`);
+  2. lembretes automáticos (`as_fn_lembretes_devidos` → `remindSigner` com ator `sistema` e o intervalo de `lembrete_cada_dias` menos a folga de 60 min; o evento da trilha leva `canal: automatico`);
+  3. `retryFinalizations`;
+  4. fecha lembrete preso (reservado há mais de 60 min sem confirmar nem desfazer → `falhou`, `interrompido`), `retryFailedInvites` e `retryFailedNotices`;
+  5. `retryWebhooks`;
+  6. expurgo: apaga a pasta do envelope e depois marca (`as_fn_expurga_envelope`);
+  7. rascunhos com `atualizado_em` há 30 dias: apaga a linha (confere status e data no próprio DELETE) e a pasta;
+  8. códigos OAuth vencidos e, só sem filtro de contas, clientes OAuth sem conexão nem código há 7 dias.
+
+  Cada tarefa pega no máximo 200 linhas por execução (inclusive as retentativas). As retentativas de avisos e webhooks pulam o que a própria execução criou, que já teve a tentativa imediata: uma tentativa por execução (regras 11.16 e 11.17). Devolve as contagens. Rodar de novo não reenvia nada (teste com as contas da fixture).
+- **CSP (épico 8.13, `next.config.ts`):** modelo "sem nonce" do guia do Next: `script-src 'self' 'unsafe-inline'` (mais `'unsafe-eval'` só em dev); `connect-src` e `img-src` com `https://*.r2.cloudflarestorage.com`; `worker-src 'self' blob:`; `font-src 'self' data: blob:`; `form-action 'self' https: http://localhost:* http://127.0.0.1:*` (o consentimento do OAuth volta ao cliente); `frame-ancestors 'none'`; `upgrade-insecure-requests` em produção. Conferida no navegador sem violação: fluxo do signatário inteiro em dev, e páginas públicas com `next start`.
 - **Erros em log:** `src/server/error-code.ts` (`errorCode`) dá o código do erro (Postgres, `resend_NNN`) ou o nome da classe; é o que vai para o log e para `as_notificacoes.erro`, nunca a mensagem livre.
 - **E-mail:** `src/server/email/mailer.ts` escolhe o driver: Resend com `RESEND_API_KEY`; caixa local em `.caixa-de-saida-local/` (um `.txt` e um `.html` por e-mail) só fora de produção; em produção sem chave o app falha. O modelo do convite fica em `templates.ts` (seção 15.2, HTML escapado e texto puro), com remetente "{nome} via Assina" e `reply-to` do remetente.
 - **Uso do nível:** "{n} de {limite} documentos · Nível {n}" no topo da lista e na Conta, em laranja a partir de 80% (`getUsage`).
@@ -281,7 +298,7 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | 17 | Cookie do signatário com `Path=/` (spec v0.8) | Com `/assinar`, o cookie não chegaria às rotas `/api/assinar/...` |
 | 18 | Webhook `envelope.recusado` só fica na fila do banco | A entrega HTTP é do épico 8.9 |
 | 19 | Componentes do pdf.js extraídos para `src/features/pdf/pdf-page.tsx` | Usados pelo editor de campos e pela página do signatário |
-| 20 | CSP completa adiada para o 8.13 | Precisa de nonce para os scripts do Next e do worker do pdf.js; os outros cabeçalhos da seção 17 já valem |
+| 20 | ~~CSP completa adiada para o 8.13~~ | Resolvida no 8.13 (divergência 59) |
 | 21 | Código conferido por `=` entre hashes sha256 (regra 11.4 pede tempo constante) | Comparar hashes não revela o código pelo tempo; o efeito pedido pela regra se mantém |
 | 22 | `integridade_violada` é código de erro (em `erro_finalizacao` e no alerta), não evento da trilha | O enum `as_tipo_evento` da seção 7 não tem esse tipo; o envelope continua em `finalizando` e o admin recebe o alerta na hora |
 | 23 | "UTC−3" sai "UTC-3" no PDF e letras fora do WinAnsi perdem o acento ou viram "?" (spec v0.9) | A Helvetica padrão do PDF só tem WinAnsi; embutir outra fonte para o texto só por isso aumentaria todo arquivo |
@@ -320,3 +337,7 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | 56 | `assina_api_chamada` também para o `/mcp` (rota `/mcp`), com a mesma amostragem | O MCP é a outra porta de máquina; a métrica "contas pela API ou pelo MCP" precisa das duas |
 | 57 | Exclusão da conta entrou no 8.12 (rota `POST /api/painel/conta/excluir` da seção 13.1 e texto da seção 15.1), embora não esteja nos critérios do épico | Está no escopo do MVP (seção 3), e os Termos e a Privacidade do 8.12 prometem a exclusão. Mensagem do e-mail que não confere: "O e-mail não confere." (spec v0.15) |
 | 58 | Textos dos Termos e da Privacidade escritos no 8.12, sem revisão jurídica | Em nome da DabLab, seguindo a seção 20 e o modelo do Reunião; revisão de um advogado fica na PENDENCIAS (P11) |
+| 59 | CSP com `'unsafe-inline'` nos scripts, sem nonce | Com nonce, toda página teria de ser dinâmica, inclusive as públicas estáticas (guia do Next). `'unsafe-eval'` fica fora em produção, como a seção 17 pede; o React escapa o conteúdo e não há HTML vindo do usuário |
+| 60 | `concluido_em` = maior data entre o relógio do servidor e o último fato da trilha, e o banco aceita até 1 min à frente do `now()` | Bug achado no 8.13: os relógios do servidor e do banco diferem (cerca de 100 ms entre o Mac e o Docker; alguns ms ou mais entre Vercel e Supabase), e a finalização falhava com `data_invalida` |
+| 61 | A faxina também fecha lembrete preso (`interrompido`) e apaga clientes OAuth órfãos | Pendências do 8.7 e do 8.10 que o critério 8.13 não listava; sem isso, a notificação ficaria pendente para sempre e o registro aberto de clientes (RFC 7591) acumularia linhas |
+| 62 | ~~Rascunho abandonado contava só pelo UPDATE da linha do envelope~~ | Resolvida no 8.13: o trigger `as_tg_rascunho_tocado` renova `atualizado_em` quando destinatários ou campos de um rascunho mudam (achado do verifier) |

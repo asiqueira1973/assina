@@ -62,13 +62,22 @@ export async function listEnvelopes(contaId: string, opts: { filtro: Filter; bus
 // registra o envio). Se o e-mail falha, desfaz a reserva e o link antigo continua valendo.
 // Lança DraftError: nao_encontrado, status_mudou, prazo_encerrado, lembrete_recente,
 // limite_lembretes, email_falhou.
-export async function remindSigner(contaId: string, envelopeId: string, signatarioId: string, meta: RequestMeta, ator: Actor = "remetente") {
+// O lembrete automático (faxina, 8.13) passa pelo mesmo caminho, com ator "sistema" e o intervalo
+// de lembrete_cada_dias (em horas) no lugar das 24 h do manual.
+export async function remindSigner(
+  contaId: string,
+  envelopeId: string,
+  signatarioId: string,
+  meta: RequestMeta,
+  ator: Actor = "remetente",
+  intervaloH: number = LEMBRETE_MANUAL_INTERVALO_H,
+) {
   const { data: claim, error } = await db()
     .rpc("as_fn_reserva_lembrete", {
       p_conta_id: contaId,
       p_envelope_id: envelopeId,
       p_signatario_id: signatarioId,
-      p_intervalo_h: LEMBRETE_MANUAL_INTERVALO_H,
+      p_intervalo_h: intervaloH,
       p_max: MAX_LEMBRETES,
     })
     .single();
@@ -120,7 +129,7 @@ export async function remindSigner(contaId: string, envelopeId: string, signatar
     p_user_agent: meta.userAgent ?? undefined,
   });
   if (cErr) throw cErr;
-  track("assina_lembrete_enviado", { quem: { conta: contaId }, chave, propriedades: { automatico: false } });
+  track("assina_lembrete_enviado", { quem: { conta: contaId }, chave, propriedades: { automatico: ator === "sistema" } });
 }
 
 // "Copiar link de assinatura" (critério 8.7): token novo, o anterior deixa de valer, evento

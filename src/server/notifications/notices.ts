@@ -1,15 +1,15 @@
 // Avisos por e-mail que não são convite — seção 15.2 (assinou_remetente, recusado_remetente,
 // recusado_destinatario; concluido_destinatario, concluido_remetente e finalizacao_falhou_admin
-// desde o 8.6) e regra 11.16. Mesmo mecanismo do convite: a linha em as_notificacoes
+// desde o 8.6; expirado_remetente desde o 8.13) e regra 11.16. Mesmo mecanismo do convite: a linha em as_notificacoes
 // (criada pela transação que causou o aviso) é reservada no banco antes do envio, então um aviso
 // não sai duas vezes. Nada de e-mail, nome ou motivo em log (seção 20.2).
 import "server-only";
 import { copy } from "@/lib/copy";
-import { ANEXO_EMAIL_MAX_BYTES, MAX_TENTATIVAS_EMAIL } from "@/lib/limits";
+import { ANEXO_EMAIL_MAX_BYTES, FAXINA_LOTE, MAX_TENTATIVAS_EMAIL } from "@/lib/limits";
 import { db } from "@/server/db/client";
 import { errorCode } from "@/server/error-code";
 import { mailer, type EmailMessage } from "@/server/email/mailer";
-import { canceledRecipientEmail, completedEmail, declinedRecipientEmail, declinedSenderEmail, finalizationFailedEmail, signedNoticeEmail } from "@/server/email/templates";
+import { canceledRecipientEmail, completedEmail, declinedRecipientEmail, declinedSenderEmail, expiredSenderEmail, finalizationFailedEmail, signedNoticeEmail } from "@/server/email/templates";
 import { finalDownloadLink } from "@/server/envelopes/final-link";
 import { storage } from "@/server/files/storage";
 
@@ -21,6 +21,7 @@ const NOTICE_TYPES = [
   "concluido_remetente",
   "finalizacao_falhou_admin",
   "cancelado_destinatario",
+  "expirado_remetente",
 ] as const;
 
 // O PDF final para anexar, se tiver até 7 MB (critério 8.6). Devolve: os bytes ou null (maior).
@@ -74,9 +75,23 @@ async function buildCompletion(note: { tipo: string; envelope_id: string | null;
   return { to: s.email, fromName: e.as_contas.nome, replyTo: e.as_contas.email, attachments, ...completedEmail({ ...base, link, detail: false }) };
 }
 
+// Prazo encerrado (regra 11.7): ao remetente, com quem assinou e quem não assinou, na ordem.
+// Devolve: a mensagem ou null (envelope sumiu, não está expirado ou a conta está suspensa).
+async function buildExpired(envelopeId: string | null): Promise<EmailMessage | null> {
+  if (!envelopeId) return null;
+  const { data: e } = await db().from("as_envelopes").select("id, titulo, status, as_contas!inner(email, suspensa_em)").eq("id", envelopeId).maybeSingle();
+  if (!e || e.status !== "expirado" || e.as_contas.suspensa_em) return null;
+  const { data: sigs } = await db().from("as_signatarios").select("nome, status").eq("envelope_id", e.id).eq("papel", "assinar").order("ordem").order("criado_em");
+  const assinaram = (sigs ?? []).filter((s) => s.status === "assinou").map((s) => s.nome);
+  const faltaram = (sigs ?? []).filter((s) => s.status !== "assinou").map((s) => s.nome);
+  const link = `${process.env.NEXT_PUBLIC_SITE_URL}/painel/envelopes/${e.id}`;
+  return { to: e.as_contas.email, ...expiredSenderEmail({ titulo: e.titulo, assinaram, faltaram, link }) };
+}
+
 // Monta o e-mail de um aviso. Recebe: a notificação. Devolve: a mensagem ou null (dados sumiram).
 async function buildNotice(note: { tipo: string; envelope_id: string | null; signatario_id: string | null }): Promise<EmailMessage | null> {
   if (["concluido_destinatario", "concluido_remetente", "finalizacao_falhou_admin"].includes(note.tipo)) return buildCompletion(note);
+  if (note.tipo === "expirado_remetente") return buildExpired(note.envelope_id);
   if (!note.envelope_id || !note.signatario_id) return null;
   const { data: e } = await db().from("as_envelopes").select("id, titulo, as_contas!inner(nome, email, suspensa_em)").eq("id", note.envelope_id).maybeSingle();
   const { data: s } = await db().from("as_signatarios").select("nome, email, motivo_recusa").eq("id", note.signatario_id).maybeSingle();
@@ -128,10 +143,19 @@ export async function sendNotice(chave: string): Promise<"sent" | "failed" | "sk
 }
 
 // Reenvia os avisos pendentes ou que falharam (faxina, regra 11.16; rota do cron no 8.13).
-// Recebe: contas a limitar (testes). Devolve: quantos saíram.
-export async function retryFailedNotices(opts: { contaIds?: string[] } = {}): Promise<number> {
-  let q = db().from("as_notificacoes").select("chave").in("tipo", [...NOTICE_TYPES]).in("status", ["pendente", "falhou"]).lt("tentativas", MAX_TENTATIVAS_EMAIL);
+// Recebe: contas a limitar (testes) e, da faxina, o início da execução (o aviso criado nela já
+// teve a tentativa imediata: uma tentativa por execução, regra 11.16). Devolve: quantos saíram.
+export async function retryFailedNotices(opts: { contaIds?: string[]; criadasAntesDe?: string } = {}): Promise<number> {
+  let q = db()
+    .from("as_notificacoes")
+    .select("chave")
+    .in("tipo", [...NOTICE_TYPES])
+    .in("status", ["pendente", "falhou"])
+    .lt("tentativas", MAX_TENTATIVAS_EMAIL)
+    .order("criado_em")
+    .limit(FAXINA_LOTE);
   if (opts.contaIds) q = q.in("conta_id", opts.contaIds);
+  if (opts.criadasAntesDe) q = q.lt("criado_em", opts.criadasAntesDe);
   const { data, error } = await q;
   if (error) throw error;
   let sent = 0;

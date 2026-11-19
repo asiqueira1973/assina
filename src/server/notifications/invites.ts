@@ -4,7 +4,7 @@
 // ninguém, porque o e-mail falhou). Nada de e-mail, nome ou token em log (seção 20.2).
 import "server-only";
 import { formatDateLong } from "@/lib/format";
-import { CONVITE_PARADO_MS, MAX_TENTATIVAS_EMAIL } from "@/lib/limits";
+import { CONVITE_PARADO_MS, FAXINA_LOTE, MAX_TENTATIVAS_EMAIL } from "@/lib/limits";
 import { maskEmail } from "@/lib/mask";
 import { db } from "@/server/db/client";
 import { errorCode } from "@/server/error-code";
@@ -80,7 +80,9 @@ export async function retryFailedInvites(opts: { contaIds?: string[] } = {}): Pr
     .select("signatario_id")
     .eq("tipo", "convite")
     .in("status", ["pendente", "falhou"])
-    .lt("tentativas", MAX_TENTATIVAS_EMAIL);
+    .lt("tentativas", MAX_TENTATIVAS_EMAIL)
+    .order("criado_em")
+    .limit(FAXINA_LOTE);
   if (opts.contaIds) q = q.in("conta_id", opts.contaIds);
   const { data, error } = await q;
   if (error) throw error;
