@@ -2287,6 +2287,10 @@ CREATE INDEX "as_oauth_codigos_conta_idx" ON "public"."as_oauth_codigos" USING "
 
 
 
+CREATE INDEX "as_oauth_codigos_credencial_idx" ON "public"."as_oauth_codigos" USING "btree" ("credencial_id");
+
+
+
 CREATE INDEX "as_oauth_codigos_expira_idx" ON "public"."as_oauth_codigos" USING "btree" ("expira_em");
 
 
