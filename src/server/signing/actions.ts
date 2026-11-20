@@ -4,6 +4,7 @@
 import "server-only";
 import { randomInt, randomUUID } from "node:crypto";
 import { z } from "zod";
+import { isValidBirthdate } from "@/lib/birthdate";
 import { isValidCpf, onlyDigits } from "@/lib/cpf";
 import {
   ASSINATURA_DATAURL_MAX,
@@ -151,15 +152,20 @@ export const SignInput = z.object({
   rubrica_texto: z.string().trim().max(NOME_MAX).optional(),
   rubrica_png: z.string().max(ASSINATURA_DATAURL_MAX).optional(),
   cpf: z.string().max(CPF_ENTRADA_MAX).optional(),
+  // "AAAA-MM-DD", o valor do <input type="date"> (épico 8.14).
+  data_nascimento: z.string().max(10).optional(),
   campos: z.array(z.object({ id: z.uuid(), valor: z.string().max(TEXTO_CAMPO_MAX) })).max(MAX_CAMPOS_POR_ASSINANTE),
 });
 
-// Assina (critério 8.5): confere CPF e imagens, grava as imagens, chama as_fn_assina (transação)
+// Assina (critério 8.5): confere CPF, data de nascimento (8.14) e imagens, grava as imagens, chama as_fn_assina (transação)
 // e, depois do commit, manda o convite do próximo e o aviso ao remetente. Devolve: o status do
 // envelope ("enviado" ou "finalizando"). Lança SignerError com o código do banco.
 export async function sign(ctx: SignerContext, input: z.infer<typeof SignInput>, meta: RequestMeta) {
   const cpf = input.cpf ? onlyDigits(input.cpf) : null;
   if (ctx.signer.exigir_cpf && (!cpf || !isValidCpf(cpf))) throw new SignerError("cpf_invalido");
+  // Só vai ao banco quando exigida; o banco confere de novo e só grava nesse caso.
+  const nascimento = ctx.signer.exigir_nascimento ? (input.data_nascimento ?? "") : null;
+  if (nascimento !== null && !isValidBirthdate(nascimento)) throw new SignerError("nascimento_invalido");
 
   // Caminho único por tentativa: duas abas (ou toque duplo) nunca gravam por cima da imagem que
   // a outra já levou ao banco, e a que perde apaga só o próprio arquivo (achado do verifier no 8.5).
@@ -193,12 +199,13 @@ export async function sign(ctx: SignerContext, input: z.infer<typeof SignInput>,
       p_consentimento: input.consentimento,
       p_ip: meta.ip ?? undefined,
       p_user_agent: meta.userAgent ?? undefined,
+      p_data_nascimento: nascimento ?? undefined,
     })
     .single();
   if (error) {
     // A transação não aconteceu: as imagens gravadas não valem.
     await Promise.all(written.map((p) => storage().delete(p)));
-    const known = ["link_invalido", "status_mudou", "prazo_encerrado", "sem_consentimento", "assinatura_ausente", "cpf_invalido", "campo_obrigatorio", "campo_invalido"];
+    const known = ["link_invalido", "status_mudou", "prazo_encerrado", "sem_consentimento", "assinatura_ausente", "cpf_invalido", "nascimento_invalido", "campo_obrigatorio", "campo_invalido"];
     if (known.includes(error.message)) throw new SignerError(error.message);
     throw error;
   }
@@ -265,7 +272,7 @@ async function signedProperties(ctx: SignerContext, metodo: "digitada" | "desenh
       .maybeSingle(),
   ]);
   const minutes = convite ? Math.max(0, Math.floor((Date.now() - new Date(convite.ocorrido_em).getTime()) / 60_000)) : null;
-  return { metodo, campos: campos ?? 0, cpf_exigido: ctx.signer.exigir_cpf, minutos_desde_convite: minutes };
+  return { metodo, campos: campos ?? 0, cpf_exigido: ctx.signer.exigir_cpf, nascimento_exigido: ctx.signer.exigir_nascimento, minutos_desde_convite: minutes };
 }
 
 // E-mails depois do commit: a ação já valeu, então uma falha aqui só fica no log (sem dado

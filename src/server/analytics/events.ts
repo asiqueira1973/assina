@@ -31,7 +31,7 @@ export const EVENT_SCHEMAS = {
   assina_documento_aberto: z.object({ ordem: count }).strict(),
   assina_codigo_validado: z.object({ tentativas: count }).strict(),
   assina_documento_assinado: z
-    .object({ metodo: z.enum(["digitada", "desenhada"]), campos: count, cpf_exigido: z.boolean(), minutos_desde_convite: count.nullable() })
+    .object({ metodo: z.enum(["digitada", "desenhada"]), campos: count, cpf_exigido: z.boolean(), nascimento_exigido: z.boolean(), minutos_desde_convite: count.nullable() })
     .strict(),
   assina_documento_recusado: none,
   assina_envelope_concluido: z.object({ origem, horas_ate_concluir: z.number().min(0).max(ANALYTICS_NUMERO_MAX), selo: z.enum(["B-B", "B-T"]) }).strict(),

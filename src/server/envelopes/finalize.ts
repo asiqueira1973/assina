@@ -67,7 +67,7 @@ async function buildFinal(envelopeId: string, reserva: string) {
   const [{ data: signers, error: sErr }, { data: fields, error: fErr }, { data: events, error: evErr }] = await Promise.all([
     db()
       .from("as_signatarios")
-      .select("id, papel, ordem, nome, email, status, cpf, ip_assinatura, assinado_em, assinatura_texto, assinatura_imagem_path, rubrica_texto, rubrica_imagem_path")
+      .select("id, papel, ordem, nome, email, status, cpf, data_nascimento, ip_assinatura, assinado_em, assinatura_texto, assinatura_imagem_path, rubrica_texto, rubrica_imagem_path")
       .eq("envelope_id", e.id)
       .order("ordem")
       .order("criado_em"),
@@ -112,6 +112,7 @@ async function buildFinal(envelopeId: string, reserva: string) {
       nome: s.nome,
       email: s.email,
       cpf: s.cpf,
+      data_nascimento: s.data_nascimento,
       ip: s.ip_assinatura as string | null,
       assinado_em: s.assinado_em!,
       assinatura: marks.get(s.id)!.assinatura,

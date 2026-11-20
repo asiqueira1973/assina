@@ -104,7 +104,7 @@ export function openApiDocument() {
                 titulo: "Contrato de prestação de serviços",
                 arquivo_url: "https://exemplo.com.br/contrato.pdf",
                 signatarios: [
-                  { nome: "Ana Souza", email: "ana@exemplo.com.br", exigir_cpf: true },
+                  { nome: "Ana Souza", email: "ana@exemplo.com.br", exigir_cpf: true, exigir_nascimento: true },
                   { nome: "Bruno Lima", email: "bruno@exemplo.com.br" },
                 ],
                 campos: [{ signatario_email: "ana@exemplo.com.br", tipo: "assinatura", pagina: 2, x: 0.1, y: 0.8 }],
@@ -276,6 +276,7 @@ export function openApiDocument() {
                   papel: { type: "string", enum: ["assinar", "copia"], default: "assinar" },
                   ordem: { type: "integer", minimum: 1, maximum: MAX_ASSINANTES },
                   exigir_cpf: { type: "boolean", default: false },
+                  exigir_nascimento: { type: "boolean", default: false, description: "Pede a data de nascimento ao assinar (só para assinar)." },
                 },
               },
             },

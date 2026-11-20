@@ -1,6 +1,6 @@
 // POST /api/assinar/{token}/assinar — assina (critério 8.5). Exige sessão do signatário.
-// Corpo: SignInput (consentimento, método, assinatura digitada ou PNG, rubrica, CPF, campos).
-// Resposta: { envelope_status }. Erros: 400 dados/CPF/campos/imagem; 409 status_mudou |
+// Corpo: SignInput (consentimento, método, assinatura digitada ou PNG, rubrica, CPF, data de
+// nascimento, campos). Resposta: { envelope_status }. Erros: 400 dados/CPF/nascimento/campos/imagem; 409 status_mudou |
 // prazo_encerrado; 404 link_invalido.
 import type { NextRequest } from "next/server";
 import { readJson, requestMeta } from "@/server/http";

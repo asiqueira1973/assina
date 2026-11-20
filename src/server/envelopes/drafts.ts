@@ -223,6 +223,7 @@ export const SignerInput = z.object({
   email: z.string().trim().toLowerCase().pipe(z.email()),
   papel: z.enum(["assinar", "copia"]).default("assinar"),
   exigir_cpf: z.boolean().default(false),
+  exigir_nascimento: z.boolean().default(false),
 });
 export const SignerList = z.array(SignerInput).max(MAX_ASSINANTES + MAX_COPIAS);
 

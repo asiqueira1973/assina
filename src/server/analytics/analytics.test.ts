@@ -109,7 +109,7 @@ describe("eventos nos fluxos", () => {
     expect(byName("assina_codigo_validado")[0]).toMatchObject({ distinct_id: `sig_${sid}`, propriedades: { tentativas: 1 } });
     expect(byName("assina_documento_assinado")[0]).toMatchObject({
       distinct_id: `sig_${sid}`,
-      propriedades: { metodo: "digitada", campos: 0, cpf_exigido: true, minutos_desde_convite: 0 },
+      propriedades: { metodo: "digitada", campos: 0, cpf_exigido: true, nascimento_exigido: false, minutos_desde_convite: 0 },
     });
     expect(byName("assina_envelope_concluido")[0]).toMatchObject({ distinct_id: sender, tela: "sistema", propriedades: { origem: "painel", selo: "B-B" } });
 

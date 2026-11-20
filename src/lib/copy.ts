@@ -108,6 +108,7 @@ export const copy = {
     signs: "Assina",
     copy: "Recebe cópia",
     requireCpf: "Pedir CPF",
+    requireBirthdate: "Pedir data de nascimento",
     inOrder: "Assinar em ordem",
     remove: "Remover",
     moveUp: "Subir",
@@ -224,6 +225,7 @@ export const copy = {
     signers: "Assinantes",
     copies: "Cópias",
     cpf: "CPF",
+    birthdate: "Data de nascimento",
     authenticated: "Autenticado por código enviado ao e-mail",
     ip: "IP",
     signedAt: "Assinado em",
@@ -314,7 +316,7 @@ export const copy = {
       limite: `quantos trazer (padrão ${MCP_LISTA_PADRAO}, máximo ${MCP_LISTA_MAX})`,
       id: "id do envelope",
       titulo: "título do envelope",
-      signatarios: "quem recebe: nome, e-mail, papel (assinar ou copia), ordem e se pede CPF",
+      signatarios: "quem recebe: nome, e-mail, papel (assinar ou copia), ordem e se pede CPF e data de nascimento",
       arquivo_url: `endereço https público do PDF; não é um anexo da conversa (até ${LIMITE_ARQUIVO_BYTES / 1024 / 1024} MB e ${MAX_PAGINAS} páginas)`,
       mensagem: "mensagem que vai no convite",
       em_ordem: "assinar um de cada vez, na ordem",
@@ -455,6 +457,8 @@ export const copy = {
     clear: "Limpar",
     cpf: "CPF",
     cpfInvalid: "CPF inválido.",
+    birthdate: "Data de nascimento",
+    birthdateInvalid: "Data de nascimento inválida.",
     useSignature: "Usar esta assinatura",
     confirm: "Confirmar",
     signed: "Documento assinado.",
@@ -574,7 +578,7 @@ export const copy = {
   // Termos de uso e Política de privacidade (seção 20, épico 8.12). Rascunho para revisão jurídica
   // (PENDENCIAS). Os trechos que dizem o que o Assina não é vêm de LEGAL_NEGATIVAS.
   legal: {
-    updated: "Última atualização: 17 de novembro de 2026.",
+    updated: "Última atualização: 20 de novembro de 2026.",
     terms: "Termos de uso",
     privacy: "Política de privacidade",
     termsSections: [
@@ -617,7 +621,7 @@ export const copy = {
         title: "Dados de quem recebe os seus documentos",
         paragraphs: [
           "Você é o controlador dos dados das pessoas para quem manda documentos e do conteúdo dos documentos. A DabLab trata esses dados como operadora, em seu nome: só para prestar o serviço, sem usá-los para outro fim, com os subprocessadores listados na Política de privacidade.",
-          "Você precisa ter base legal para mandar esses dados e para pedir o CPF de quem assina. Quando você exclui um envelope ou a sua conta, esses dados são apagados do Assina.",
+          "Você precisa ter base legal para mandar esses dados e para pedir o CPF e a data de nascimento de quem assina. Quando você exclui um envelope ou a sua conta, esses dados são apagados do Assina.",
         ],
       },
       {
@@ -677,7 +681,7 @@ export const copy = {
       {
         title: "Se você recebeu um documento para assinar",
         paragraphs: [
-          "Guardamos o nome e o e-mail que quem mandou o documento informou, o CPF se ele o pediu, a imagem ou o texto da sua assinatura, o que você preencheu nos campos do documento e, de cada passo (abrir, receber o código, assinar ou recusar), a hora, o endereço IP e o navegador. Isso serve para provar quem assinou, quando e que o documento não mudou depois.",
+          "Guardamos o nome e o e-mail que quem mandou o documento informou, o CPF e a data de nascimento, se ele os pediu, a imagem ou o texto da sua assinatura, o que você preencheu nos campos do documento e, de cada passo (abrir, receber o código, assinar ou recusar), a hora, o endereço IP e o navegador. Isso serve para provar quem assinou, quando e que o documento não mudou depois.",
           "Parte desses dados aparece no manifesto, a página que vai no fim do documento assinado e chega a todos os participantes.",
           "Quem decide sobre esses dados é quem mandou o documento para você; o Assina os trata em nome dele. Se quiser excluí-los ou corrigi-los, peça a ele. Se não conseguir falar com ele, escreva para alexandre@dablab.com.br. O seu e-mail não é usado para nada além desse documento.",
         ],

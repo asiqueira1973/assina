@@ -128,7 +128,7 @@ export function buildMcpServer(account: Account, meta: RequestMeta): McpServer {
       inputSchema: {
         titulo: z.string().describe(T.args.titulo),
         signatarios: z
-          .array(z.object({ nome: z.string(), email: z.string(), papel: z.enum(["assinar", "copia"]).optional(), ordem: z.number().int().optional(), exigir_cpf: z.boolean().optional() }))
+          .array(z.object({ nome: z.string(), email: z.string(), papel: z.enum(["assinar", "copia"]).optional(), ordem: z.number().int().optional(), exigir_cpf: z.boolean().optional(), exigir_nascimento: z.boolean().optional() }))
           .describe(T.args.signatarios),
         arquivo_url: z.string().optional().describe(T.args.arquivo_url),
         mensagem: z.string().optional().describe(T.args.mensagem),

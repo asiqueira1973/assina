@@ -246,14 +246,14 @@ isOneToOne: false
                   ]
                 },"as_signatarios": {
                   Row: {
-                    "assinado_em": string | null,"assinatura_imagem_path": string | null,"assinatura_texto": string | null,"codigo_expira_em": string | null,"codigo_hash": string | null,"codigo_tentativas": number,"codigos_enviados_hora": number,"consentimento_versao": string | null,"conta_id": string,"cpf": string | null,"criado_em": string,"email": string,"envelope_id": string,"exigir_cpf": boolean,"id": string,"ip_assinatura": unknown,"janela_codigos_desde": string | null,"lembretes_enviados": number,"metodo_assinatura": Database["public"]['Enums']["as_metodo_assinatura"] | null,"motivo_recusa": string | null,"nome": string,"notificado_em": string | null,"ordem": number,"papel": Database["public"]['Enums']["as_papel"],"recusado_em": string | null,"rubrica_imagem_path": string | null,"rubrica_texto": string | null,"status": Database["public"]['Enums']["as_status_signatario"],"token_hash": string,"ultimo_lembrete_em": string | null,"user_agent_assinatura": string | null
+                    "assinado_em": string | null,"assinatura_imagem_path": string | null,"assinatura_texto": string | null,"codigo_expira_em": string | null,"codigo_hash": string | null,"codigo_tentativas": number,"codigos_enviados_hora": number,"consentimento_versao": string | null,"conta_id": string,"cpf": string | null,"criado_em": string,"data_nascimento": string | null,"email": string,"envelope_id": string,"exigir_cpf": boolean,"exigir_nascimento": boolean,"id": string,"ip_assinatura": unknown,"janela_codigos_desde": string | null,"lembretes_enviados": number,"metodo_assinatura": Database["public"]['Enums']["as_metodo_assinatura"] | null,"motivo_recusa": string | null,"nome": string,"notificado_em": string | null,"ordem": number,"papel": Database["public"]['Enums']["as_papel"],"recusado_em": string | null,"rubrica_imagem_path": string | null,"rubrica_texto": string | null,"status": Database["public"]['Enums']["as_status_signatario"],"token_hash": string,"ultimo_lembrete_em": string | null,"user_agent_assinatura": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "assinado_em"?: string | null,"assinatura_imagem_path"?: string | null,"assinatura_texto"?: string | null,"codigo_expira_em"?: string | null,"codigo_hash"?: string | null,"codigo_tentativas"?: number,"codigos_enviados_hora"?: number,"consentimento_versao"?: string | null,"conta_id": string,"cpf"?: string | null,"criado_em"?: string,"email": string,"envelope_id": string,"exigir_cpf"?: boolean,"id"?: string,"ip_assinatura"?: unknown,"janela_codigos_desde"?: string | null,"lembretes_enviados"?: number,"metodo_assinatura"?: Database["public"]['Enums']["as_metodo_assinatura"] | null,"motivo_recusa"?: string | null,"nome": string,"notificado_em"?: string | null,"ordem"?: number,"papel"?: Database["public"]['Enums']["as_papel"],"recusado_em"?: string | null,"rubrica_imagem_path"?: string | null,"rubrica_texto"?: string | null,"status"?: Database["public"]['Enums']["as_status_signatario"],"token_hash": string,"ultimo_lembrete_em"?: string | null,"user_agent_assinatura"?: string | null
+                    "assinado_em"?: string | null,"assinatura_imagem_path"?: string | null,"assinatura_texto"?: string | null,"codigo_expira_em"?: string | null,"codigo_hash"?: string | null,"codigo_tentativas"?: number,"codigos_enviados_hora"?: number,"consentimento_versao"?: string | null,"conta_id": string,"cpf"?: string | null,"criado_em"?: string,"data_nascimento"?: string | null,"email": string,"envelope_id": string,"exigir_cpf"?: boolean,"exigir_nascimento"?: boolean,"id"?: string,"ip_assinatura"?: unknown,"janela_codigos_desde"?: string | null,"lembretes_enviados"?: number,"metodo_assinatura"?: Database["public"]['Enums']["as_metodo_assinatura"] | null,"motivo_recusa"?: string | null,"nome": string,"notificado_em"?: string | null,"ordem"?: number,"papel"?: Database["public"]['Enums']["as_papel"],"recusado_em"?: string | null,"rubrica_imagem_path"?: string | null,"rubrica_texto"?: string | null,"status"?: Database["public"]['Enums']["as_status_signatario"],"token_hash": string,"ultimo_lembrete_em"?: string | null,"user_agent_assinatura"?: string | null
                   }
                   Update: {
-                    "assinado_em"?: string | null,"assinatura_imagem_path"?: string | null,"assinatura_texto"?: string | null,"codigo_expira_em"?: string | null,"codigo_hash"?: string | null,"codigo_tentativas"?: number,"codigos_enviados_hora"?: number,"consentimento_versao"?: string | null,"conta_id"?: string,"cpf"?: string | null,"criado_em"?: string,"email"?: string,"envelope_id"?: string,"exigir_cpf"?: boolean,"id"?: string,"ip_assinatura"?: unknown,"janela_codigos_desde"?: string | null,"lembretes_enviados"?: number,"metodo_assinatura"?: Database["public"]['Enums']["as_metodo_assinatura"] | null,"motivo_recusa"?: string | null,"nome"?: string,"notificado_em"?: string | null,"ordem"?: number,"papel"?: Database["public"]['Enums']["as_papel"],"recusado_em"?: string | null,"rubrica_imagem_path"?: string | null,"rubrica_texto"?: string | null,"status"?: Database["public"]['Enums']["as_status_signatario"],"token_hash"?: string,"ultimo_lembrete_em"?: string | null,"user_agent_assinatura"?: string | null
+                    "assinado_em"?: string | null,"assinatura_imagem_path"?: string | null,"assinatura_texto"?: string | null,"codigo_expira_em"?: string | null,"codigo_hash"?: string | null,"codigo_tentativas"?: number,"codigos_enviados_hora"?: number,"consentimento_versao"?: string | null,"conta_id"?: string,"cpf"?: string | null,"criado_em"?: string,"data_nascimento"?: string | null,"email"?: string,"envelope_id"?: string,"exigir_cpf"?: boolean,"exigir_nascimento"?: boolean,"id"?: string,"ip_assinatura"?: unknown,"janela_codigos_desde"?: string | null,"lembretes_enviados"?: number,"metodo_assinatura"?: Database["public"]['Enums']["as_metodo_assinatura"] | null,"motivo_recusa"?: string | null,"nome"?: string,"notificado_em"?: string | null,"ordem"?: number,"papel"?: Database["public"]['Enums']["as_papel"],"recusado_em"?: string | null,"rubrica_imagem_path"?: string | null,"rubrica_texto"?: string | null,"status"?: Database["public"]['Enums']["as_status_signatario"],"token_hash"?: string,"ultimo_lembrete_em"?: string | null,"user_agent_assinatura"?: string | null
                   }
                   Relationships: [
                     {
@@ -326,7 +326,7 @@ isOneToOne: false
         isSetofReturn: true
       } },
 "as_fn_assina":
-{ Args: { "p_assinatura_path": string,"p_assinatura_texto": string,"p_campos": Json,"p_consentimento": string,"p_cpf": string,"p_ip"?: unknown,"p_metodo": Database["public"]['Enums']["as_metodo_assinatura"],"p_rubrica_path": string,"p_rubrica_texto": string,"p_signatario_id": string,"p_token_hash": string,"p_user_agent"?: string }; Returns: {
+{ Args: { "p_assinatura_path": string,"p_assinatura_texto": string,"p_campos": Json,"p_consentimento": string,"p_cpf": string,"p_data_nascimento"?: string,"p_ip"?: unknown,"p_metodo": Database["public"]['Enums']["as_metodo_assinatura"],"p_rubrica_path": string,"p_rubrica_texto": string,"p_signatario_id": string,"p_token_hash": string,"p_user_agent"?: string }; Returns: {
               "envelope_status": Database["public"]['Enums']["as_status_envelope"],"proximo_id": string
             }[]
                            },
@@ -407,9 +407,11 @@ isOneToOne: false
 "conta_id": string,
 "cpf": string | null,
 "criado_em": string,
+"data_nascimento": string | null,
 "email": string,
 "envelope_id": string,
 "exigir_cpf": boolean,
+"exigir_nascimento": boolean,
 "id": string,
 "ip_assinatura": unknown,
 "janela_codigos_desde": string | null,
@@ -520,9 +522,11 @@ isOneToOne: false
 "conta_id": string,
 "cpf": string | null,
 "criado_em": string,
+"data_nascimento": string | null,
 "email": string,
 "envelope_id": string,
 "exigir_cpf": boolean,
+"exigir_nascimento": boolean,
 "id": string,
 "ip_assinatura": unknown,
 "janela_codigos_desde": string | null,
@@ -581,9 +585,11 @@ isOneToOne: false
 "conta_id": string,
 "cpf": string | null,
 "criado_em": string,
+"data_nascimento": string | null,
 "email": string,
 "envelope_id": string,
 "exigir_cpf": boolean,
+"exigir_nascimento": boolean,
 "id": string,
 "ip_assinatura": unknown,
 "janela_codigos_desde": string | null,

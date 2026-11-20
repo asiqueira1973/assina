@@ -21,8 +21,8 @@ const data: ManifestData = {
   enviado_em: "2026-11-10T13:00:00Z",
   concluido_em: "2026-11-12T18:30:05Z",
   assinantes: [
-    { nome: "Ana Souza", email: "ana.souza@exemplo.com", cpf: "52998224725", ip: "203.0.113.9", assinado_em: "2026-11-11T12:01:02Z", assinatura: { texto: "Ana Souza" } },
-    { nome: "Łukasz Kowalski", email: "lukasz@exemplo.pl", cpf: null, ip: "2001:db8::1", assinado_em: "2026-11-12T18:30:00Z", assinatura: { png: PNG_1PX } },
+    { nome: "Ana Souza", email: "ana.souza@exemplo.com", cpf: "52998224725", data_nascimento: "1985-03-15", ip: "203.0.113.9", assinado_em: "2026-11-11T12:01:02Z", assinatura: { texto: "Ana Souza" } },
+    { nome: "Łukasz Kowalski", email: "lukasz@exemplo.pl", cpf: null, data_nascimento: null, ip: "2001:db8::1", assinado_em: "2026-11-12T18:30:00Z", assinatura: { png: PNG_1PX } },
   ],
   copias: [{ nome: "Carla Dias", email: "carla@exemplo.com" }],
   eventos: Array.from({ length: 60 }, (_, i) => ({ ocorrido_em: new Date(Date.UTC(2026, 10, 10, 13, i)).toISOString(), tipo: i % 2 ? "visualizou" : "assinou", quem: "Ana Souza", ip: "203.0.113.9" })),
@@ -53,7 +53,7 @@ describe("manifesto (regra 11.9)", () => {
     const pages = await pdfPagesText(await manifestPdf());
     expect(pages.length).toBeGreaterThan(1); // 60 eventos não cabem numa página
     const all = pages.join(" ");
-    for (const t of ["Manifesto de assinaturas", "Contrato de prestação de serviços", "Clínica Exemplo", "7K2M-9QXH-4T1B", "a".repeat(64), "a***@exemplo.com", "***.982.247-**", "Lukasz Kowalski", "2001:db8::1", "c***@exemplo.com", "10/11/2026 10:00:00 UTC-3"]) {
+    for (const t of ["Manifesto de assinaturas", "Contrato de prestação de serviços", "Clínica Exemplo", "7K2M-9QXH-4T1B", "a".repeat(64), "a***@exemplo.com", "***.982.247-**", "Data de nascimento 15/03/1985", "Lukasz Kowalski", "2001:db8::1", "c***@exemplo.com", "10/11/2026 10:00:00 UTC-3"]) {
       expect(all).toContain(t);
     }
     // O código aparece como XXXX-XXXX-XXXX, igual ao painel (regra 11.11 e coluna do spec, seção 7).

@@ -1,5 +1,5 @@
 // PUT /api/painel/envelopes/{id}/signatarios — troca a lista de destinatários do rascunho
-// (seção 13.1, critério 8.2, regra 11.2). Corpo: { signatarios: [{ nome, email, papel, exigir_cpf }] },
+// (seção 13.1, critério 8.2, regra 11.2). Corpo: { signatarios: [{ nome, email, papel, exigir_cpf, exigir_nascimento }] },
 // na ordem de assinatura. Resposta: { signatarios } como ficaram.
 import type { NextRequest } from "next/server";
 import { z } from "zod";

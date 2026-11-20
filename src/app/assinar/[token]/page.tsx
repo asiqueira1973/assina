@@ -96,6 +96,7 @@ async function Signer({ params }: Props) {
       maskedEmail={maskEmail(signer.email)}
       signerName={signer.nome}
       requireCpf={signer.exigir_cpf}
+      requireBirthdate={signer.exigir_nascimento}
       hasSession={hasSession}
       colorIndex={colorIndex}
       pages={(envelope.dimensoes_paginas as { l: number; a: number }[] | null) ?? []}

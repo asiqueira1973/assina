@@ -52,6 +52,7 @@ export const ApiCreateInput = z
           papel: z.enum(["assinar", "copia"]).default("assinar"),
           ordem: z.number().int().min(1).max(MAX_ASSINANTES).optional(),
           exigir_cpf: z.boolean().default(false),
+          exigir_nascimento: z.boolean().default(false),
         }),
       )
       .min(1)
@@ -107,7 +108,7 @@ export async function createEnvelopeFromApi(
     const ordered = input.signatarios
       .map((s, i) => ({ s, i }))
       .sort((a, b) => (a.s.ordem ?? 99) - (b.s.ordem ?? 99) || a.i - b.i)
-      .map(({ s }) => ({ nome: s.nome, email: s.email, papel: s.papel, exigir_cpf: s.exigir_cpf }));
+      .map(({ s }) => ({ nome: s.nome, email: s.email, papel: s.papel, exigir_cpf: s.exigir_cpf, exigir_nascimento: s.exigir_nascimento }));
     await replaceSigners(contaId, envelope.id, ordered);
 
     if (input.arquivo_url) {

@@ -20,7 +20,7 @@ Banco em português, prefixo `as_`. Toda tabela com RLS ligado e **nenhuma polí
 | `as_oauth_clientes` | Clientes MCP (Claude, ChatGPT) que se registram sozinhos | `id` é o `client_id`; `redirect_uris` de 1 a 5 |
 | `as_oauth_codigos` | Código de autorização do OAuth do MCP, de uso único | `codigo_hash`: só o hash; `expira_em`: 10 min; `usado_em`: nulo até ser trocado |
 | `as_envelopes` | Um documento enviado para assinatura | `status`: ver enum. `origem`: por onde nasceu (painel, API ou MCP). `hash_original`: SHA-256 do PDF, preenchido no envio e nunca mais alterado. `codigo_verificacao`: 12 caracteres base32 Crockford, impresso no manifesto. `arquivos_expurgados_em`: quando a faxina apagou os arquivos de um envelope encerrado sem conclusão. `finalizacao_reserva` / `finalizacao_reservada_em`: quem está finalizando agora e desde quando (vence em 5 min). `tentativas_finalizacao`: contada ao reservar. `erro_finalizacao`: código da última falha. `arquivo_final_path`: `{conta}/{id}/final-{reserva}.pdf`. `hash_final`, `arquivo_final_path`, `selo` e `concluido_em` não mudam depois de preenchidos (`as_tg_final_imutavel`) |
-| `as_signatarios` | Quem assina (`assinar`) ou só recebe cópia (`copia`) | `token_hash`: SHA-256 do token do link (o link em si não fica no banco). `ordem`: 1–10, única entre os assinantes do envelope (exclusion constraint diferida, para reordenar numa transação); nas cópias é sempre 1 e não significa nada. `codigo_*`: o código de 6 dígitos atual e seus contadores. `ip_assinatura`/`user_agent_assinatura`: evidência do momento da assinatura |
+| `as_signatarios` | Quem assina (`assinar`) ou só recebe cópia (`copia`) | `token_hash`: SHA-256 do token do link (o link em si não fica no banco). `ordem`: 1–10, única entre os assinantes do envelope (exclusion constraint diferida, para reordenar numa transação); nas cópias é sempre 1 e não significa nada. `codigo_*`: o código de 6 dígitos atual e seus contadores. `ip_assinatura`/`user_agent_assinatura`: evidência do momento da assinatura. `exigir_cpf`/`cpf` e `exigir_nascimento`/`data_nascimento` (8.14): pedidos pelo remetente só para quem assina, informados pelo próprio signatário |
 | `as_campos` | Campos posicionados no PDF | `x`, `y`, `largura`, `altura` em fração da página (0–1, origem no canto superior esquerdo); o campo nunca passa da borda (check). `valor`: preenchido na assinatura |
 | `as_eventos` | Trilha de auditoria | Só inserção. `seq` 1, 2, 3… por envelope. `hash` encadeado no `hash_anterior` (regra 11.6). `ocorrido_em`: relógio do banco |
 | `as_notificacoes` | Cada e-mail a enviar, para não repetir e para retentar | `chave`: idempotência (o mesmo e-mail não sai duas vezes). `reservada_em`: reserva de 2 min de quem está mandando agora |
@@ -59,7 +59,7 @@ as_contas 1 ── N as_envelopes 1 ── N as_signatarios 1 ── N as_campos
 
 ## 3. Lógica que vive no banco
 
-Fonte: `supabase/migrations/20261117130100_as_logica.sql`. Toda função com `search_path = ''`, sem `EXECUTE` para `anon`/`authenticated`.
+Fonte: `supabase/migrations/20261117130100_as_logica.sql` e as migrations dos épicos seguintes (`as_fn_substitui_signatarios`, `as_fn_filhos_congelados` e `as_fn_assina` foram redefinidas por último em `20261120130000_as_data_nascimento.sql`). Toda função com `search_path = ''`, sem `EXECUTE` para `anon`/`authenticated`.
 
 | Nome | Tipo | Tabela | Quando | O que faz |
 |---|---|---|---|---|
@@ -71,7 +71,7 @@ Fonte: `supabase/migrations/20261117130100_as_logica.sql`. Toda função com `se
 | `as_tg_envelope_congelado` | trigger BEFORE UPDATE | `as_envelopes` | update | só aceita as transições de status da seção 12 (`status_mudou`); fora de rascunho, recusa mudar título, mensagem, ordem, prazo, dados do arquivo e `hash_original` (`envelope_congelado`); deixa a faxina limpar o caminho do arquivo de envelope encerrado sem conclusão |
 | `as_tg_envelope_nasce_rascunho` | trigger BEFORE INSERT | `as_envelopes` | insert | envelope só nasce em rascunho, sem hash nem datas de envio (`status_mudou`) |
 | `as_tg_envelope_exclusao` | trigger BEFORE DELETE | `as_envelopes` | delete | envelope enviado ou finalizando não se exclui (`envelope_em_andamento`); a exclusão da conta passa em cascata |
-| `as_tg_filhos_congelados` | trigger BEFORE INSERT/UPDATE/DELETE | `as_signatarios`, `as_campos` | qualquer escrita | com o envelope fora de rascunho, ninguém entra nem sai e nome, e-mail, ordem e coordenadas não mudam; status, código, assinatura, token e valor continuam mudando |
+| `as_tg_filhos_congelados` | trigger BEFORE INSERT/UPDATE/DELETE | `as_signatarios`, `as_campos` | qualquer escrita | com o envelope fora de rascunho, ninguém entra nem sai e nome, e-mail, ordem, `exigir_cpf`, `exigir_nascimento` e coordenadas não mudam; status, código, assinatura, token e valor continuam mudando |
 | `as_tg_valida_campo` | trigger BEFORE INSERT/UPDATE | `as_campos` | escrita de campo | página existe no PDF e o campo é de um assinante do mesmo envelope (`campo_invalido`) |
 | `as_fn_transicao_envelope` | função | `as_envelopes` | servidor, a cada mudança de status | muda o status só se ele ainda é o esperado; devolve se mudou (trava de concorrência) |
 | `as_fn_cria_rascunho` | função | `as_envelopes`, `as_eventos` | criar envelope (painel, API, MCP) | cria o rascunho e o evento `criado` na mesma transação |
@@ -82,7 +82,7 @@ Fonte: `supabase/migrations/20261117130100_as_logica.sql`. Toda função com `se
 | `as_fn_reserva_notificacao` | função | `as_notificacoes` | antes de mandar um e-mail | reserva a notificação por 2 min e conta a tentativa; um segundo pedido não passa; reserva vencida (servidor caiu) libera sozinha |
 | `as_fn_novo_codigo` | função | `as_signatarios` | pedir código | guarda o código novo (hash) com validade de 10 min; 60 s entre envios; 5 por hora; invalida o anterior |
 | `as_fn_valida_codigo` | função | `as_signatarios`, `as_eventos` | digitar o código | uso único; 5 erros bloqueiam; registra acerto e erro na trilha |
-| `as_fn_assina` | função | envelope, signatário, campos, trilha, notificações | assinar | tudo numa transação: confere link, status, prazo, assinatura, CPF, campos; grava; registra consentiu e assinou; próximo da ordem ou finalizando |
+| `as_fn_assina` | função | envelope, signatário, campos, trilha, notificações | assinar | tudo numa transação: confere link, status, prazo, assinatura, CPF, data de nascimento (8.14), campos; grava; registra consentiu e assinou; próximo da ordem ou finalizando |
 | `as_fn_recusa` | função | envelope, signatário, trilha, notificações, webhooks | recusar | envelope recusado e encerrado; avisos; webhook na fila |
 | `as_fn_reserva_finalizacao` | função | envelope, notificações | finalizar | um finalizador por vez, com id de reserva; conta a tentativa; esgotado sem alerta → enfileira o alerta |
 | `as_fn_alerta_finalizacao` | função | `as_notificacoes` | finalizar | alerta ao admin uma vez só |
@@ -185,8 +185,8 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
   - o código chama `validateCode` (`as_fn_valida_codigo`) e abre o cookie `as_sig_{id}` (JWT de 2 h com o `token_hash` atual e um `jti`);
   - consentimento;
   - documento pelo pdf.js (`/documento` só com sessão), com os campos do signatário, a barra "Campos: n de m" e "Próximo campo";
-  - folha da assinatura (Digitar em "Dancing Script" ou Desenhar em canvas que trava a rolagem; CPF validado pelos dígitos);
-  - "Assinar" chama `sign`: confere CPF e PNG (até 200 KB), grava as imagens, chama `as_fn_assina` e, depois do commit, manda o convite do próximo e o aviso ao remetente;
+  - folha da assinatura (Digitar em "Dancing Script" ou Desenhar em canvas que trava a rolagem; CPF validado pelos dígitos; data de nascimento, quando exigida, num seletor de data, validada por `isValidBirthdate` em `src/lib/birthdate.ts`);
+  - "Assinar" chama `sign`: confere CPF, data de nascimento e PNG (até 200 KB), grava as imagens, chama `as_fn_assina` e, depois do commit, manda o convite do próximo e o aviso ao remetente;
   - "Recusar" chama `decline` (`as_fn_recusa`) e manda os avisos;
   - "visualizou" sai quando a primeira página aparece, uma vez por sessão (pelo `jti`).
 - **Avisos por e-mail:** `src/server/notifications/notices.ts` manda `assinou_remetente`, `recusado_remetente` e `recusado_destinatario` com a mesma reserva do convite; `retryFailedNotices` é a parte da faxina (rota no 8.13).

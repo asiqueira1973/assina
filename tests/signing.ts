@@ -32,7 +32,7 @@ export function fakeOutbox(): EmailMessage[] {
   return outbox;
 }
 
-type SignerSpec = { nome: string; email: string; papel?: string; exigir_cpf?: boolean };
+type SignerSpec = { nome: string; email: string; papel?: string; exigir_cpf?: boolean; exigir_nascimento?: boolean };
 
 // Envelope enviado pelo painel. Recebe: ids das contas criadas (para o afterAll), destinatários,
 // PDF e campos. Devolve: id, conta e o id de cada destinatário por e-mail.

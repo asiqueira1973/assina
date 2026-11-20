@@ -299,7 +299,7 @@ $$;
 ALTER FUNCTION "public"."as_fn_api_lista_envelopes"("p_conta_id" "uuid", "p_status" "public"."as_status_envelope", "p_limite" integer, "p_cursor_criado" timestamp with time zone, "p_cursor_id" "uuid") OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."as_fn_assina"("p_signatario_id" "uuid", "p_token_hash" "text", "p_metodo" "public"."as_metodo_assinatura", "p_assinatura_texto" "text", "p_assinatura_path" "text", "p_rubrica_texto" "text", "p_rubrica_path" "text", "p_cpf" "text", "p_campos" "jsonb", "p_consentimento" "text", "p_ip" "inet" DEFAULT NULL::"inet", "p_user_agent" "text" DEFAULT NULL::"text") RETURNS TABLE("envelope_status" "public"."as_status_envelope", "proximo_id" "uuid")
+CREATE OR REPLACE FUNCTION "public"."as_fn_assina"("p_signatario_id" "uuid", "p_token_hash" "text", "p_metodo" "public"."as_metodo_assinatura", "p_assinatura_texto" "text", "p_assinatura_path" "text", "p_rubrica_texto" "text", "p_rubrica_path" "text", "p_cpf" "text", "p_campos" "jsonb", "p_consentimento" "text", "p_ip" "inet" DEFAULT NULL::"inet", "p_user_agent" "text" DEFAULT NULL::"text", "p_data_nascimento" "date" DEFAULT NULL::"date") RETURNS TABLE("envelope_status" "public"."as_status_envelope", "proximo_id" "uuid")
     LANGUAGE "plpgsql"
     SET "search_path" TO ''
     AS $_$
@@ -341,6 +341,15 @@ begin
   if v_s.exigir_cpf and (p_cpf is null or p_cpf !~ '^[0-9]{11}$') then
     raise exception 'cpf_invalido';
   end if;
+  -- Data de nascimento (épico 8.14): real, não futura e de no máximo 120 anos atrás
+  -- (NASCIMENTO_IDADE_MAX em src/lib/limits.ts). O dia de hoje vale; amanhã, não.
+  if v_s.exigir_nascimento and (
+       p_data_nascimento is null
+       or p_data_nascimento > (now() at time zone 'America/Sao_Paulo')::date
+       or p_data_nascimento < (now() at time zone 'America/Sao_Paulo')::date - interval '120 years'
+     ) then
+    raise exception 'nascimento_invalido';
+  end if;
 
   -- Só campos do próprio signatário podem vir na lista.
   if exists (
@@ -381,6 +390,7 @@ begin
          rubrica_texto = nullif(left(trim(coalesce(p_rubrica_texto, '')), 100), ''),
          rubrica_imagem_path = p_rubrica_path,
          cpf = case when v_s.exigir_cpf then p_cpf end,
+         data_nascimento = case when v_s.exigir_nascimento then p_data_nascimento end,
          consentimento_versao = p_consentimento,
          ip_assinatura = p_ip,
          user_agent_assinatura = left(p_user_agent, 500),
@@ -420,7 +430,7 @@ end;
 $_$;
 
 
-ALTER FUNCTION "public"."as_fn_assina"("p_signatario_id" "uuid", "p_token_hash" "text", "p_metodo" "public"."as_metodo_assinatura", "p_assinatura_texto" "text", "p_assinatura_path" "text", "p_rubrica_texto" "text", "p_rubrica_path" "text", "p_cpf" "text", "p_campos" "jsonb", "p_consentimento" "text", "p_ip" "inet", "p_user_agent" "text") OWNER TO "postgres";
+ALTER FUNCTION "public"."as_fn_assina"("p_signatario_id" "uuid", "p_token_hash" "text", "p_metodo" "public"."as_metodo_assinatura", "p_assinatura_texto" "text", "p_assinatura_path" "text", "p_rubrica_texto" "text", "p_rubrica_path" "text", "p_cpf" "text", "p_campos" "jsonb", "p_consentimento" "text", "p_ip" "inet", "p_user_agent" "text", "p_data_nascimento" "date") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."as_fn_atualizado_em"() RETURNS "trigger"
@@ -809,12 +819,15 @@ CREATE TABLE IF NOT EXISTS "public"."as_signatarios" (
     "ultimo_lembrete_em" timestamp with time zone,
     "lembretes_enviados" smallint DEFAULT 0 NOT NULL,
     "criado_em" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "exigir_nascimento" boolean DEFAULT false NOT NULL,
+    "data_nascimento" "date",
     CONSTRAINT "as_signatarios_assinatura_texto_check" CHECK ((("assinatura_texto" IS NULL) OR ("char_length"("assinatura_texto") <= 100))),
     CONSTRAINT "as_signatarios_cpf_check" CHECK ((("cpf" IS NULL) OR ("cpf" ~ '^[0-9]{11}$'::"text"))),
     CONSTRAINT "as_signatarios_cpf_ck" CHECK (((NOT "exigir_cpf") OR ("papel" = 'assinar'::"public"."as_papel"))),
     CONSTRAINT "as_signatarios_email_check" CHECK (("email" = "lower"("email"))),
     CONSTRAINT "as_signatarios_lembretes_enviados_check" CHECK ((("lembretes_enviados" >= 0) AND ("lembretes_enviados" <= 10))),
     CONSTRAINT "as_signatarios_motivo_recusa_check" CHECK ((("motivo_recusa" IS NULL) OR (("char_length"("motivo_recusa") >= 1) AND ("char_length"("motivo_recusa") <= 500)))),
+    CONSTRAINT "as_signatarios_nascimento_ck" CHECK (((NOT "exigir_nascimento") OR ("papel" = 'assinar'::"public"."as_papel"))),
     CONSTRAINT "as_signatarios_nome_check" CHECK ((("char_length"("nome") >= 1) AND ("char_length"("nome") <= 100))),
     CONSTRAINT "as_signatarios_ordem_check" CHECK ((("ordem" >= 1) AND ("ordem" <= 10))),
     CONSTRAINT "as_signatarios_user_agent_assinatura_check" CHECK ((("user_agent_assinatura" IS NULL) OR ("char_length"("user_agent_assinatura") <= 500)))
@@ -822,6 +835,14 @@ CREATE TABLE IF NOT EXISTS "public"."as_signatarios" (
 
 
 ALTER TABLE "public"."as_signatarios" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."as_signatarios"."exigir_nascimento" IS 'O remetente pede a data de nascimento (só para assinar).';
+
+
+
+COMMENT ON COLUMN "public"."as_signatarios"."data_nascimento" IS 'Informada pelo próprio signatário ao assinar, se exigida; nula caso contrário.';
+
 
 
 CREATE OR REPLACE FUNCTION "public"."as_fn_envia_envelope"("p_envelope_id" "uuid", "p_conta_id" "uuid", "p_caminho" "text", "p_hash" "text", "p_tokens" "jsonb", "p_limite_diario" integer, "p_limites_nivel" integer[], "p_ator" "public"."as_ator", "p_ip" "inet" DEFAULT NULL::"inet", "p_user_agent" "text" DEFAULT NULL::"text") RETURNS SETOF "public"."as_signatarios"
@@ -1107,6 +1128,7 @@ begin
        or new.papel is distinct from old.papel
        or new.ordem is distinct from old.ordem
        or new.exigir_cpf is distinct from old.exigir_cpf
+       or new.exigir_nascimento is distinct from old.exigir_nascimento
     then
       raise exception 'envelope_congelado';
     end if;
@@ -1693,17 +1715,19 @@ begin
       v_ordem := 1;
     end if;
 
-    insert into public.as_signatarios (envelope_id, conta_id, papel, ordem, nome, email, exigir_cpf, token_hash)
+    insert into public.as_signatarios (envelope_id, conta_id, papel, ordem, nome, email, exigir_cpf, exigir_nascimento, token_hash)
     values (
       p_envelope_id, p_conta_id, v_papel, v_ordem, trim(v_item ->> 'nome'), v_email,
       coalesce((v_item ->> 'exigir_cpf')::boolean, false) and v_papel = 'assinar',
+      coalesce((v_item ->> 'exigir_nascimento')::boolean, false) and v_papel = 'assinar',
       encode(extensions.digest(extensions.gen_random_bytes(32), 'sha256'), 'hex')
     )
     on conflict (envelope_id, email) do update
       set papel = excluded.papel,
           ordem = excluded.ordem,
           nome = excluded.nome,
-          exigir_cpf = excluded.exigir_cpf;
+          exigir_cpf = excluded.exigir_cpf,
+          exigir_nascimento = excluded.exigir_nascimento;
 
     -- Quem deixou de assinar e virou cópia perde os campos (campo é só de assinante, 7.5).
     if v_papel = 'copia' then
@@ -2504,8 +2528,8 @@ GRANT ALL ON FUNCTION "public"."as_fn_api_lista_envelopes"("p_conta_id" "uuid", 
 
 
 
-REVOKE ALL ON FUNCTION "public"."as_fn_assina"("p_signatario_id" "uuid", "p_token_hash" "text", "p_metodo" "public"."as_metodo_assinatura", "p_assinatura_texto" "text", "p_assinatura_path" "text", "p_rubrica_texto" "text", "p_rubrica_path" "text", "p_cpf" "text", "p_campos" "jsonb", "p_consentimento" "text", "p_ip" "inet", "p_user_agent" "text") FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."as_fn_assina"("p_signatario_id" "uuid", "p_token_hash" "text", "p_metodo" "public"."as_metodo_assinatura", "p_assinatura_texto" "text", "p_assinatura_path" "text", "p_rubrica_texto" "text", "p_rubrica_path" "text", "p_cpf" "text", "p_campos" "jsonb", "p_consentimento" "text", "p_ip" "inet", "p_user_agent" "text") TO "service_role";
+REVOKE ALL ON FUNCTION "public"."as_fn_assina"("p_signatario_id" "uuid", "p_token_hash" "text", "p_metodo" "public"."as_metodo_assinatura", "p_assinatura_texto" "text", "p_assinatura_path" "text", "p_rubrica_texto" "text", "p_rubrica_path" "text", "p_cpf" "text", "p_campos" "jsonb", "p_consentimento" "text", "p_ip" "inet", "p_user_agent" "text", "p_data_nascimento" "date") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."as_fn_assina"("p_signatario_id" "uuid", "p_token_hash" "text", "p_metodo" "public"."as_metodo_assinatura", "p_assinatura_texto" "text", "p_assinatura_path" "text", "p_rubrica_texto" "text", "p_rubrica_path" "text", "p_cpf" "text", "p_campos" "jsonb", "p_consentimento" "text", "p_ip" "inet", "p_user_agent" "text", "p_data_nascimento" "date") TO "service_role";
 
 
 

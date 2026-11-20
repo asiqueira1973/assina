@@ -43,7 +43,7 @@ const PNG_1PX = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1H
 
 // Envelope enviado. Recebe: destinatários, ordem e campos por e-mail. Devolve: id, conta e a
 // função que acha o link de um destinatário no e-mail.
-async function sentEnvelope(signatarios: { nome: string; email: string; papel?: string; exigir_cpf?: boolean }[], opts: { emOrdem?: boolean; campos?: (ids: Record<string, string>) => unknown[] } = {}) {
+async function sentEnvelope(signatarios: { nome: string; email: string; papel?: string; exigir_cpf?: boolean; exigir_nascimento?: boolean }[], opts: { emOrdem?: boolean; campos?: (ids: Record<string, string>) => unknown[] } = {}) {
   const a = await createTestAccount({ accepted: true });
   ids.push(a.id);
   const res = await createEnvelope(apiRequest("/api/painel/envelopes", { method: "POST", cookie: a.cookie, body: { nome_arquivo: "Contrato.pdf" } }));
@@ -142,6 +142,22 @@ describe("signatário (épico 8.5)", () => {
     expect(await (await visualizou(sreq("/x", { cookie }), tctx(token))).json()).toEqual({ registrado: false });
     const { count } = await db().from("as_eventos").select("id", { count: "exact", head: true }).eq("envelope_id", id).eq("tipo", "visualizou");
     expect(count).toBe(1);
+  });
+
+  // Épico 8.14: data de nascimento exigida pelo remetente, conferida no servidor e no banco.
+  it("data de nascimento: ausente, futura ou no formato da tela é recusada; válida é gravada", async () => {
+    const { byEmail } = await sentEnvelope([{ nome: "Ana", email: "ana@s.dev", exigir_nascimento: true }]);
+    const token = linkFor("ana@s.dev");
+    const cookie = await openSession(token, "ana@s.dev");
+    for (const over of [{}, { data_nascimento: "2999-01-01" }, { data_nascimento: "15/03/1985" }, { data_nascimento: "1985-02-31" }]) {
+      const r = await assinar(sreq("/x", { cookie, body: signBody(over) }), tctx(token));
+      expect(r.status).toBe(400);
+      expect((await r.json()).codigo).toBe("nascimento_invalido");
+    }
+    const ok = await assinar(sreq("/x", { cookie, body: signBody({ data_nascimento: "1985-03-15" }) }), tctx(token));
+    expect(ok.status).toBe(200);
+    const { data } = await db().from("as_signatarios").select("data_nascimento").eq("id", byEmail["ana@s.dev"]).single();
+    expect(data!.data_nascimento).toBe("1985-03-15");
   });
 
   it("assinar em ordem: obrigatórios, CPF, PNG; a próxima recebe o convite; a última leva a finalizando", async () => {

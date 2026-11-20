@@ -161,6 +161,24 @@ describe("fluxo pela API (critério 8.9)", () => {
     expect(count).toBe(1);
   });
 
+  // Épico 8.14: exigir_nascimento pela API vale só para quem assina (cópia nunca pede).
+  it("exigir_nascimento: gravado no assinante; na cópia fica falso", async () => {
+    const a = await apiAccount();
+    const r = await create(
+      req("/envelopes", a.auth, {
+        method: "POST",
+        body: { titulo: "Nascimento", signatarios: [{ nome: "Ana", email: "ana@api.dev", exigir_nascimento: true }, { nome: "Cris", email: "cris@api.dev", papel: "copia", exigir_nascimento: true }] },
+      }),
+    );
+    expect(r.status).toBe(201);
+    const { envelope } = await r.json();
+    const { data } = await db().from("as_signatarios").select("email, exigir_nascimento").eq("envelope_id", envelope.id).order("email");
+    expect(data).toEqual([
+      { email: "ana@api.dev", exigir_nascimento: true },
+      { email: "cris@api.dev", exigir_nascimento: false },
+    ]);
+  });
+
   it("Idempotency-Key repetida sem arquivo ainda: o mesmo envelope e uma upload_url nova", async () => {
     const a = await apiAccount();
     const body = { titulo: "Sem arquivo", signatarios: signers };

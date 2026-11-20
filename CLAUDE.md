@@ -9,7 +9,7 @@ Se um teste falhar, corrija o código, não o teste; nunca pule nem apague teste
 Bug: teste que reproduz → ver falhar → commit → `touch .claude/fix-mode` → corrigir → `rm .claude/fix-mode`.
 
 ## Estado
-Épicos 8.0 a 8.13 concluídos: o MVP inteiro (até a faxina diária, a CSP e a documentação de entrega). Migrations aplicadas só no **local**; pendências do Alexandre em `PENDENCIAS.md`. Próximo: as pendências de conta e console de `PENDENCIAS.md` e as decisões 25.x, antes do lançamento. E-mail em dev vai para `.caixa-de-saida-local/`.
+Épicos 8.0 a 8.13 concluídos: o MVP inteiro, no ar em assina.app.br. Depois do lançamento, 8.14 (data de nascimento do assinante, `plans/8.14-data-nascimento.md`). Migrations no local e no remoto (pelo MCP); pendências do Alexandre em `PENDENCIAS.md`. Próximo: as pendências que restam em `PENDENCIAS.md` e as decisões 25.x em aberto. E-mail em dev vai para `.caixa-de-saida-local/`.
 
 ## Convenções (seção 18)
 - Banco em português `snake_case`, **sempre com prefixo `as_`** (projeto Supabase compartilhado `jeesdmfcrmhyufwzwzwt`). Código, variáveis e arquivos em inglês; fronteira em `src/server/db/`.
@@ -30,7 +30,7 @@ Bug: teste que reproduz → ver falhar → commit → `touch .claude/fix-mode` �
 - O `guard-copy` lê o arquivo inteiro, comentários inclusive: em `src/app`, `src/features`, `copy.ts`, e-mail e manifesto, nem comentário pode dizer "assinatura digital", "certificado digital" etc. Escreva "assinado eletronicamente".
 - Regex com acento em hook: o grep do macOS compara byte a byte dentro de `[...]`. Use alternância `(a|á)`, nunca `[aá]`.
 - Hook novo ou alterado → acrescente casos em `scripts/test-guardrails.sh` e atualize o Anexo B do spec no mesmo commit.
-- Nunca logar e-mail, nome, CPF, título, token, código ou URL `/assinar/…`.
+- Nunca logar e-mail, nome, CPF, data de nascimento, título, token, código ou URL `/assinar/…`.
 - Página ou layout do painel (lê a sessão) leva `export const instant = false`, senão o Next 16.4 acusa "Could not validate that a segment… has instant navigation". O opt-out vale por segmento: página nova também precisa.
 - O console do navegador guarda erros antigos entre recargas na mesma aba: para conferir se um erro sumiu, abra uma aba nova.
 - Docker dividido com outros Supabase locais (otcb, Reunião): se o Postgres travar ou der `57014`, pare os outros.

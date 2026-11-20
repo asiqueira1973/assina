@@ -83,6 +83,8 @@ export const TEXTO_CAMPO_MAX = 200;
 // e leva o prefixo da data URL; CPF com pontuação; motivo com espaços sobrando.
 export const ASSINATURA_DATAURL_MAX = Math.ceil((ASSINATURA_PNG_MAX_BYTES * 4) / 3) + 64;
 export const CPF_ENTRADA_MAX = 20;
+// Data de nascimento (épico 8.14): no máximo 120 anos atrás; o banco confere o mesmo número em as_fn_assina.
+export const NASCIMENTO_IDADE_MAX = 120;
 export const MOTIVO_ENTRADA_MAX = MOTIVO_MAX * 2;
 // Regra 11.14: o signatário baixa o final pelo link até 30 dias depois da conclusão.
 export const DOWNLOAD_FINAL_DIAS = 30;

@@ -25,7 +25,7 @@ import styles from "./draft.module.css";
 import panel from "@/app/painel/painel.module.css";
 
 type Settings = { titulo: string; mensagem: string; em_ordem: boolean; prazo_dias: number; lembrete_cada_dias: number | null };
-type Signer = { key: string; nome: string; email: string; papel: "assinar" | "copia"; exigir_cpf: boolean };
+type Signer = { key: string; nome: string; email: string; papel: "assinar" | "copia"; exigir_cpf: boolean; exigir_nascimento: boolean };
 type FileInfo = { nome: string; paginas: number; tamanho: number };
 
 type Props = {
@@ -69,7 +69,7 @@ export function DraftEditor({ envelopeId, initialSettings, initialFile, initialS
   const [settings, setSettings] = useState<Settings>(initialSettings);
   const [file, setFile] = useState<FileInfo | null>(initialFile);
   const [signers, setSigners] = useState<Signer[]>(
-    initialSigners.length ? initialSigners : [{ key: crypto.randomUUID(), nome: "", email: "", papel: "assinar", exigir_cpf: false }],
+    initialSigners.length ? initialSigners : [{ key: crypto.randomUUID(), nome: "", email: "", papel: "assinar", exigir_cpf: false, exigir_nascimento: false }],
   );
   const [savedSigners, setSavedSigners] = useState<number>(initialSigners.filter((s) => s.papel === "assinar").length);
   const [notice, setNotice] = useState<{ fieldsRemoved?: boolean; alreadySigned?: boolean }>({ alreadySigned });
@@ -90,7 +90,7 @@ export function DraftEditor({ envelopeId, initialSettings, initialFile, initialS
   );
   const saveSigners = useCallback(
     async (list: Signer[]) => {
-      const payload = list.filter((s) => !isBlank(s)).map(({ nome, email, papel, exigir_cpf }) => ({ nome: nome.trim(), email: email.trim().toLowerCase(), papel, exigir_cpf }));
+      const payload = list.filter((s) => !isBlank(s)).map(({ nome, email, papel, exigir_cpf, exigir_nascimento }) => ({ nome: nome.trim(), email: email.trim().toLowerCase(), papel, exigir_cpf, exigir_nascimento }));
       const res = await fetch(`/api/painel/envelopes/${envelopeId}/signatarios`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
@@ -128,13 +128,13 @@ export function DraftEditor({ envelopeId, initialSettings, initialFile, initialS
   const canAdd = signerCount < MAX_ASSINANTES && signers.length < MAX_ASSINANTES + MAX_COPIAS;
 
   function update(key: string, patch: Partial<Signer>) {
-    changeSigners(signers.map((s) => (s.key === key ? { ...s, ...patch, ...(patch.papel === "copia" ? { exigir_cpf: false } : {}) } : s)));
+    changeSigners(signers.map((s) => (s.key === key ? { ...s, ...patch, ...(patch.papel === "copia" ? { exigir_cpf: false, exigir_nascimento: false } : {}) } : s)));
   }
   function remove(key: string) {
     changeSigners(signers.filter((s) => s.key !== key));
   }
   function add() {
-    setSigners([...signers, { key: crypto.randomUUID(), nome: "", email: "", papel: "assinar", exigir_cpf: false }]);
+    setSigners([...signers, { key: crypto.randomUUID(), nome: "", email: "", papel: "assinar", exigir_cpf: false, exigir_nascimento: false }]);
   }
   // Move um destinatário de posição na lista (ordem de assinatura, regra 11.2).
   function move(from: number, to: number) {
@@ -280,6 +280,12 @@ export function DraftEditor({ envelopeId, initialSettings, initialFile, initialS
                     <label className={styles.toggle}>
                       <input type="checkbox" checked={s.exigir_cpf} onChange={(e) => update(s.key, { exigir_cpf: e.target.checked })} />
                       {copy.draft.requireCpf}
+                    </label>
+                  ) : null}
+                  {isSigner ? (
+                    <label className={styles.toggle}>
+                      <input type="checkbox" checked={s.exigir_nascimento} onChange={(e) => update(s.key, { exigir_nascimento: e.target.checked })} />
+                      {copy.draft.requireBirthdate}
                     </label>
                   ) : null}
                   {settings.em_ordem && isSigner ? (

@@ -10,6 +10,7 @@ import { rgb, type PDFDocument, type PDFFont, type PDFImage, type PDFPage } from
 import { encode } from "uqr";
 import { copy } from "@/lib/copy";
 import { formatDateTimeSeconds } from "@/lib/format";
+import { formatBirthdate } from "@/lib/birthdate";
 import { maskCpf, maskEmail } from "@/lib/mask";
 import { formatVerificationCode } from "@/server/envelopes/verification-code";
 import { embedPngOnce, fitLine, safeText, wrapLines, type PdfFonts } from "./fonts";
@@ -18,6 +19,8 @@ export type ManifestSigner = {
   nome: string;
   email: string;
   cpf: string | null;
+  // "AAAA-MM-DD", completa no manifesto (épico 8.14, decisão do Alexandre).
+  data_nascimento: string | null;
   ip: string | null;
   assinado_em: string;
   assinatura: { texto?: string; png?: Uint8Array };
@@ -147,6 +150,7 @@ export async function appendManifest(doc: PDFDocument, data: ManifestData, fonts
     w.text(s.nome, { size: 11, font: fonts.bold });
     w.field(m.email, maskEmail(s.email));
     if (s.cpf) w.field(m.cpf, maskCpf(s.cpf));
+    if (s.data_nascimento) w.field(m.birthdate, formatBirthdate(s.data_nascimento));
     // A assinatura como foi feita: a imagem desenhada ou o nome em cursiva.
     const boxH = 36;
     const boxW = 180;

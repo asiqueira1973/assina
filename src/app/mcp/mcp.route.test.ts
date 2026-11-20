@@ -174,8 +174,10 @@ describe("/mcp (seção 13.3)", () => {
     expect(tools.find((t) => t.name === "cancelar_envelope")!.annotations).toMatchObject({ destructiveHint: true });
     expect(tools.some((t) => /exclu/i.test(t.name))).toBe(false);
 
-    const created = await call(bearer, "criar_envelope", { titulo: "Pelo Claude", signatarios: [{ nome: "Ana", email: "ana@mcp.dev" }] });
+    const created = await call(bearer, "criar_envelope", { titulo: "Pelo Claude", signatarios: [{ nome: "Ana", email: "ana@mcp.dev", exigir_nascimento: true }] });
     const id = created.structuredContent.envelope.id as string;
+    // Épico 8.14: o MCP também aceita exigir_nascimento.
+    expect((await db().from("as_signatarios").select("exigir_nascimento").eq("envelope_id", id).single()).data).toEqual({ exigir_nascimento: true });
     expect(created.content[0].text).toContain("O envelope não foi enviado.");
     expect(created.content[0].text).toContain(`/painel/envelopes/${id}/editar`);
     expect(outbox).toHaveLength(0);

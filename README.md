@@ -328,7 +328,7 @@ As ferramentas são `listar_envelopes`, `ver_envelope`, `criar_envelope` (só ra
 
 ## Analytics no Visão do Produto (épico 8.11)
 
-Os eventos da seção 21 do spec (`assina_*`) saem do servidor para o Visão do Produto, sem segurar a resposta: timeout de 4 s, e qualquer falha só fica no log como `analytics_falhou`. Nenhuma propriedade leva título, nome, e-mail, CPF, mensagem, motivo, IP, valor de campo ou nome de arquivo.
+Os eventos da seção 21 do spec (`assina_*`) saem do servidor para o Visão do Produto, sem segurar a resposta: timeout de 4 s, e qualquer falha só fica no log como `analytics_falhou`. Nenhuma propriedade leva título, nome, e-mail, CPF, data de nascimento, mensagem, motivo, IP, valor de campo ou nome de arquivo.
 
 1. No Visão do Produto, crie o projeto **Assina** com o prefixo `assina_` e copie a chave de ingestão.
 2. Na Vercel (e no `.env.local`, se quiser ver os eventos de dev), defina:

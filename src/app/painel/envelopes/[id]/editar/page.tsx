@@ -38,7 +38,7 @@ async function Editor({ params, searchParams }: Props) {
         lembrete_cada_dias: envelope.lembrete_cada_dias,
       }}
       initialFile={envelope.paginas ? { nome: envelope.nome_arquivo ?? "", paginas: envelope.paginas, tamanho: envelope.tamanho_bytes ?? 0 } : null}
-      initialSigners={signers.map((s) => ({ key: s.id, nome: s.nome, email: s.email, papel: s.papel, exigir_cpf: s.exigir_cpf }))}
+      initialSigners={signers.map((s) => ({ key: s.id, nome: s.nome, email: s.email, papel: s.papel, exigir_cpf: s.exigir_cpf, exigir_nascimento: s.exigir_nascimento }))}
       alreadySigned={aviso === "ja_assinado"}
     />
     <EnvelopeActions envelopeId={envelope.id} titulo={envelope.titulo} canDownloadOriginal={false} canDownloadSigned={false} canCancel={false} canDelete canExport={false} />

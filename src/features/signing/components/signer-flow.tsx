@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { PdfPageCanvas, usePdfDocument } from "@/features/pdf/pdf-page";
 import { copy } from "@/lib/copy";
+import { isValidBirthdate } from "@/lib/birthdate";
 import { isValidCpf } from "@/lib/cpf";
 import { signerColor } from "@/lib/fields";
 import { CODIGO_INTERVALO_S, CONSENTIMENTO_VERSAO, MOTIVO_MAX } from "@/lib/limits";
@@ -26,6 +27,7 @@ type Props = {
   maskedEmail: string;
   signerName: string;
   requireCpf: boolean;
+  requireBirthdate: boolean;
   hasSession: boolean;
   colorIndex: number;
   pages: { l: number; a: number }[];
@@ -64,6 +66,7 @@ export function SignerFlow(p: Props) {
   const [signature, setSignature] = useState<Mark | null>(null);
   const [initials, setInitials] = useState<Mark | null>(null);
   const [cpf, setCpf] = useState("");
+  const [birthdate, setBirthdate] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
   const [sheet, setSheet] = useState<Sheet>(null);
   const [declining, setDeclining] = useState(false);
@@ -154,7 +157,7 @@ export function SignerFlow(p: Props) {
   // Sem campos (assina só no manifesto), a assinatura conta como o único campo.
   const total = p.fields.length || 1;
   const done = p.fields.length ? p.fields.filter(isDone).length : signature ? 1 : 0;
-  const ready = consent && !!signature && p.fields.every(isDone) && (!p.requireCpf || isValidCpf(cpf));
+  const ready = consent && !!signature && p.fields.every(isDone) && (!p.requireCpf || isValidCpf(cpf)) && (!p.requireBirthdate || isValidBirthdate(birthdate));
 
   // Abre o que falta: o próximo campo pendente (rolando até ele), ou a assinatura.
   function openField(f: Field) {
@@ -166,7 +169,7 @@ export function SignerFlow(p: Props) {
   function nextField() {
     const pending = p.fields.find((f) => !isDone(f));
     if (!pending) {
-      if (!signature || (p.requireCpf && !isValidCpf(cpf))) setSheet({ kind: "assinatura" });
+      if (!signature || (p.requireCpf && !isValidCpf(cpf)) || (p.requireBirthdate && !isValidBirthdate(birthdate))) setSheet({ kind: "assinatura" });
       return;
     }
     document.querySelector(`[data-field-id="${pending.id}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -186,6 +189,7 @@ export function SignerFlow(p: Props) {
       rubrica_texto: initials?.metodo === "digitada" ? initials.texto : undefined,
       rubrica_png: initials?.metodo === "desenhada" ? initials.png : undefined,
       cpf: p.requireCpf ? cpf : undefined,
+      data_nascimento: p.requireBirthdate ? birthdate : undefined,
       campos: p.fields.filter((f) => f.tipo === "texto" || f.tipo === "caixa").map((f) => ({ id: f.id, valor: values[f.id] ?? "" })),
     };
     const { ok, data } = await post("assinar", body).catch(() => ({ ok: false, data: {} as { codigo?: string } }));
@@ -197,7 +201,7 @@ export function SignerFlow(p: Props) {
       return;
     }
     if (data.codigo && handleSituation(data.codigo)) return;
-    setError(data.codigo === "cpf_invalido" ? copy.signer.cpfInvalid : copy.errors.generic);
+    setError(data.codigo === "cpf_invalido" ? copy.signer.cpfInvalid : data.codigo === "nascimento_invalido" ? copy.signer.birthdateInvalid : copy.errors.generic);
   }
 
   async function submitDecline() {
@@ -392,10 +396,13 @@ export function SignerFlow(p: Props) {
           initialText={signature?.metodo === "digitada" ? signature.texto : p.signerName}
           requireCpf={p.requireCpf}
           initialCpf={cpf}
+          requireBirthdate={p.requireBirthdate}
+          initialBirthdate={birthdate}
           onClose={() => setSheet(null)}
-          onDone={(mark, newCpf) => {
+          onDone={(mark, newCpf, newBirthdate) => {
             setSignature(mark);
             setCpf(newCpf);
+            setBirthdate(newBirthdate);
             setSheet(null);
           }}
         />
@@ -405,6 +412,8 @@ export function SignerFlow(p: Props) {
           initialText={initials?.metodo === "digitada" ? initials.texto : initialsOf(p.signerName)}
           requireCpf={false}
           initialCpf=""
+          requireBirthdate={false}
+          initialBirthdate=""
           onClose={() => setSheet(null)}
           onDone={(mark) => {
             setInitials(mark);
