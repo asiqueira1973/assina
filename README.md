@@ -1,8 +1,96 @@
-# Assina
+<p align="center">
+  <img src="docs/images/banner.png" alt="Assina: mande documentos para assinar, grátis. Painel com a lista de envelopes (aguardando, concluídos, rascunho e cancelado) e, no celular, a página de quem assina com o campo de assinatura destacado.">
+</p>
 
-Assinatura eletrônica de documentos PDF, grátis e em português: suba um PDF, diga quem assina e receba de volta o documento assinado, selado e com a trilha de auditoria. Com API REST e servidor MCP para sistemas e agentes. Um produto [DabLab](https://dablab.com.br) em [assina.app.br](https://assina.app.br).
+<p align="center">
+  <a href="https://assina.app.br"><b>assina.app.br</b></a> ·
+  <a href="https://assina.app.br/verificar">Verificar um documento</a> ·
+  <a href="https://assina.app.br/docs/api">API</a> ·
+  <a href="LICENSE">Licença MIT</a>
+</p>
 
-**Status:** MVP implementado (épicos 8.0 a 8.13, ver `plans/`), rodando no Supabase local. Antes do lançamento faltam os passos de conta e console da DabLab em [`PENDENCIAS.md`](PENDENCIAS.md): migrations no remoto, R2, Google, Resend, selo, Vercel e revisão jurídica.
+O **Assina** é uma plataforma de assinatura eletrônica de PDFs, grátis e em português. Você sobe o documento, diz quem assina e recebe de volta o PDF assinado, com o selo de integridade da plataforma, o manifesto com todas as assinaturas e a trilha de auditoria. Quem assina não precisa criar conta.
+
+Tem **API REST** e **servidor MCP**, então sistemas e assistentes como o Claude e o ChatGPT também mandam documentos. O código é aberto, sob a licença MIT. É um produto da [DabLab](https://dablab.com.br).
+
+## Como funciona
+
+<p align="center">
+  <img src="docs/images/passos.png" alt="Como funciona. 1, Prepare: suba o PDF, diga quem assina e arraste os campos para a página. 2, Assinam: cada pessoa recebe um link, confirma o e-mail com um código e assina, no celular ou no computador, sem criar conta. 3, Pronto: todos recebem o PDF final selado, com o manifesto e a trilha, e qualquer pessoa confere a autenticidade.">
+</p>
+
+### Prepare o documento
+
+Suba um PDF de até 10 MB e 100 páginas. Diga quem assina e quem só recebe cópia, em ordem ou todos ao mesmo tempo. Defina um prazo e se o Assina deve mandar lembretes automáticos. Arraste para a página os campos de cada pessoa: assinatura, rubrica, data, nome, texto e caixa de seleção.
+
+![Editor de campos: a paleta com assinatura, rubrica, data, nome, texto e caixa de seleção, e o contrato com os campos de assinatura e data de Rafael Souza e Beatriz Lima, cada um com a sua cor](docs/images/editor.png)
+
+### Assinar sem conta
+
+Quem assina recebe um link por e-mail e confirma que é dono do endereço com um código de 6 dígitos. Depois concorda em assinar eletronicamente, percorre os campos e assina digitando o nome, que vira letra cursiva, ou desenhando. Pode também recusar, dizendo o motivo.
+
+![Página de quem assina: a janela "Sua assinatura" com as abas Digitar e Desenhar e o nome Lucas Ferreira em letra cursiva](docs/images/assinatura.png)
+
+<p align="center">
+  <img src="docs/images/celular.png" width="300" alt="A mesma página no celular: o termo de adesão com o campo de assinatura destacado e a contagem 'Campos: 1 de 2'">
+</p>
+
+### Acompanhe cada envelope
+
+O painel mostra cada envelope com o andamento ("1 de 2 assinaram"), filtros e busca. No detalhe estão quem já assinou, os botões para lembrar ou copiar o link de quem falta, os downloads e a trilha de auditoria: cada passo com a hora, o IP e o navegador, encadeado por hash, o que mostra se algo foi alterado.
+
+![Lista de envelopes: um termo de adesão aguardando, um contrato concluído, um acordo de confidencialidade com 1 de 2 assinaturas, um recibo concluído, um aditivo cancelado e uma proposta em rascunho](docs/images/painel.png)
+
+![Detalhe de um contrato concluído: Rafael Souza e Beatriz Lima assinaram, Fernanda Alves recebe cópia, e a trilha de auditoria íntegra com cada passo, quem fez e de qual IP](docs/images/detalhe.png)
+
+### Selado e verificável por qualquer pessoa
+
+Quando a última pessoa assina, o Assina grava os campos no PDF, acrescenta o **manifesto** e aplica um **selo PAdES** da plataforma, com carimbo do tempo. Qualquer alteração depois disso aparece no leitor de PDF. Todos recebem o arquivo final por e-mail.
+
+<p align="center">
+  <img src="docs/images/pdf-assinado.png" width="45%" alt="Página do contrato com as assinaturas de Rafael Souza e Beatriz Lima em letra cursiva e as datas">
+  &nbsp;
+  <img src="docs/images/pdf-manifesto.png" width="45%" alt="Manifesto de assinaturas: remetente, código de verificação, SHA-256 do original, cada assinante com a assinatura, o IP e a hora, as cópias e a trilha de auditoria, com um QR code para a verificação">
+</p>
+
+Em [assina.app.br/verificar](https://assina.app.br/verificar), qualquer pessoa confere um documento arrastando o PDF ou digitando o código do manifesto. O arquivo não sai do computador: o navegador calcula a impressão digital (SHA-256) e manda só ela.
+
+![Verificação de um contrato concluído: título, datas, selo com carimbo do tempo e os dois assinantes com a hora de cada assinatura](docs/images/verificar.png)
+
+### Para sistemas e assistentes
+
+- **API REST v1** com chave por conta: criar envelope (com o PDF por URL ou upload), enviar, acompanhar, lembrar, cancelar e baixar. O contrato está em OpenAPI 3.1, em [/docs/api](https://assina.app.br/docs/api).
+- **Webhooks** assinados com HMAC: quem assinou, concluído, recusado, cancelado e expirado.
+- **Servidor MCP** com login OAuth: conecte no Claude ou no ChatGPT, peça "manda este contrato para a Ana assinar" e acompanhe de lá. Criar o envelope só gera o rascunho; enviar é uma ação à parte, que o assistente pede para você confirmar.
+
+## O que o Assina é e o que não é
+
+As assinaturas do Assina são **assinaturas eletrônicas**. A validade entre as partes se apoia no art. 10, § 2º, da Medida Provisória 2.200-2/2001, com a autoria comprovada pelo código enviado ao e-mail e a integridade garantida pelo selo e pela trilha. O Assina **não** faz assinatura com certificado ICP-Brasil e não substitui firma reconhecida. Para escrituras e atos que exigem esse certificado, use um cartório ou um certificado próprio. Detalhes nos [Termos de uso](https://assina.app.br/termos).
+
+## Quanto custa
+
+Usar em [assina.app.br](https://assina.app.br) é grátis, com limites para proteger o serviço: 30 envelopes enviados por dia por conta e 50 documentos guardados no nível 1.
+
+Para rodar a sua própria instância, o Assina cabe nos planos gratuitos de Supabase, Cloudflare R2 e Resend (este com até 100 e-mails por dia). O plano gratuito da Vercel é para uso pessoal; em uso comercial, a Vercel pede o plano Pro.
+
+## Stack técnica
+
+- Next.js 16 (App Router, Cache Components) com React 19 e TypeScript
+- Supabase (Postgres; RLS sem políticas, acesso só pelo servidor; regras e trilha encadeada em funções SQL)
+- Cloudflare R2 para os arquivos (URLs assinadas)
+- pdf-lib e pdf.js; selo PAdES com node-forge e carimbo do tempo RFC 3161
+- Google OAuth (login), Resend (e-mails), Vercel (hospedagem e cron diário)
+- MCP SDK com OAuth 2.1 e PKCE; zod; jose
+- Vitest e pgTAP para testes
+
+## Como foi construído
+
+Desenvolvido com o Claude (Anthropic) a partir de uma especificação SDD: [spec.md](spec.md). Cada épico tem um plano em [plans/](plans/), e o que existe de fato está em [DOCUMENTACAO-TECNICA.md](DOCUMENTACAO-TECNICA.md).
+
+- `npm run verify` roda typecheck, lint, guardrails, testes de banco (pgTAP) e de aplicação (Vitest), build e `npm audit`.
+- Hooks do Claude Code em `.claude/hooks/` protegem migrations, segredos, testes e a copy (nada de prometer o que o Assina não é).
+- Um agente verificador em `.claude/agents/` confere cada épico contra o spec antes do commit.
+- Regras para o agente em [CLAUDE.md](CLAUDE.md).
 
 | Arquivo | O que é |
 |---|---|
@@ -11,8 +99,16 @@ Assinatura eletrônica de documentos PDF, grátis e em português: suba um PDF, 
 | [`CLAUDE.md`](CLAUDE.md) | Guia para sessões do Claude Code neste repositório |
 | [`modelo-assina.dbml`](modelo-assina.dbml) | Modelo de dados para o dbdiagram.io |
 | [`prompt-design-assina.md`](prompt-design-assina.md) | Prompt das telas para o Claude Design |
-| [`PENDENCIAS.md`](PENDENCIAS.md) | O que depende de conta, console ou decisão do Alexandre |
+| [`PENDENCIAS.md`](PENDENCIAS.md) | O que ainda depende de conta, console ou decisão |
 | [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) | Referência funcional e componentes de terceiros |
+
+## Contribuições
+
+Issues são bem-vindas: bugs, dúvidas e sugestões. Veja [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
+# Rodar e publicar
 
 ## Rodar localmente
 
@@ -264,4 +360,6 @@ Para conferir depois de criar, rode `for i in $(seq 1 35); do curl -s -o /dev/nu
 
 ## Licença
 
-MIT. Referência funcional: [SignuDoc](https://github.com/NYLLON-SOFTWARE/signudoc) (MIT); todo código adaptado dele leva atribuição em `THIRD_PARTY_NOTICES.md`.
+[MIT](LICENSE). Referência funcional: [SignuDoc](https://github.com/NYLLON-SOFTWARE/signudoc) (MIT); todo código adaptado dele leva atribuição em `THIRD_PARTY_NOTICES.md`.
+
+Feito pela [Dab Lab](https://www.dablab.com.br/), agência de inovação no-code para startups e PMEs, com automações usando IA.
