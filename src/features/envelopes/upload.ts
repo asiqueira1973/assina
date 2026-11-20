@@ -29,7 +29,7 @@ function putWithProgress(url: string, file: File, onProgress: (pct: number) => v
 // Devolve: id do envelope e os avisos. Lança UploadError com a frase da seção 15.
 export async function uploadPdf(
   file: File,
-  opts: { envelopeId?: string; onProgress: (pct: number) => void; onChecking: () => void },
+  opts: { envelopeId?: string; retitle?: boolean; onProgress: (pct: number) => void; onChecking: () => void },
 ): Promise<AttachResult> {
   // Recusa no navegador o que nem precisa subir (o servidor confere de novo).
   if (file.size > LIMITE_ARQUIVO_BYTES) throw new UploadError(copy.draft.fileErrors.grande_demais);
@@ -58,7 +58,7 @@ export async function uploadPdf(
   const res = await fetch(`/api/painel/envelopes/${envelopeId}/arquivo`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ nome_arquivo: file.name }),
+    body: JSON.stringify({ nome_arquivo: file.name, ...(opts.retitle ? { renomear: true } : {}) }),
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {

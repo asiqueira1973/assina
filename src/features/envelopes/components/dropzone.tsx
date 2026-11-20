@@ -31,7 +31,8 @@ export function Dropzone({ envelopeId, compact, onDone }: Props) {
     setProgress(0);
     setChecking(false);
     try {
-      const result = await uploadPdf(file, { envelopeId: draftId, onProgress: setProgress, onChecking: () => setChecking(true) });
+      // Rascunho que nasceu de uma tentativa recusada aqui: o título acompanha o novo arquivo.
+      const result = await uploadPdf(file, { envelopeId: draftId, retitle: !!draftId && draftId !== envelopeId, onProgress: setProgress, onChecking: () => setChecking(true) });
       onDone(result);
     } catch (e) {
       const failedDraft = (e as UploadError & { envelopeId?: string }).envelopeId;

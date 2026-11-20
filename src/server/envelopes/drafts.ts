@@ -170,8 +170,9 @@ export async function newUploadUrl(contaId: string, envelopeId: string) {
 // 5) Apaga o original anterior.
 // Arquivo inválido: apaga o upload; o original anterior continua.
 // Recebe: conta, envelope e o nome do arquivo escolhido. Devolve: o envelope, se os campos foram
-// removidos e se o PDF já tinha assinatura digital (aviso 11.1).
-export async function attachUploadedFile(contaId: string, envelopeId: string, filename: string) {
+// removidos e se o PDF já tinha assinatura digital (aviso 11.1). retitle: o título passa a vir do
+// nome deste arquivo (8.2, passo 4), para a nova tentativa depois de um arquivo recusado.
+export async function attachUploadedFile(contaId: string, envelopeId: string, filename: string, opts: { retitle?: boolean } = {}) {
   await requireDraft(contaId, envelopeId);
   const paths = envelopePaths(contaId, envelopeId);
 
@@ -212,7 +213,7 @@ export async function attachUploadedFile(contaId: string, envelopeId: string, fi
   const row = data?.[0];
   if (row?.caminho_anterior && row.caminho_anterior !== newPath) await storage().delete(row.caminho_anterior);
 
-  const envelope = await getEnvelope(contaId, envelopeId);
+  const envelope = opts.retitle ? await updateDraftSettings(contaId, envelopeId, { titulo: titleFromFilename(filename) }) : await getEnvelope(contaId, envelopeId);
   if (!envelope) throw new DraftError("nao_encontrado");
   return { envelope, fieldsRemoved: !!row?.campos_removidos, alreadySigned: check.alreadySigned };
 }

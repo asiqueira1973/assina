@@ -128,7 +128,7 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | `/painel/envelopes/novo` | — | via as rotas abaixo | — |
 | `POST /api/painel/envelopes` | — | `as_envelopes`, `as_eventos` | `requireConta`, `as_fn_cria_rascunho`, URL de upload |
 | `POST /api/painel/envelopes/{id}/upload` | `as_envelopes` | — | `requireConta`, URL de upload |
-| `POST /api/painel/envelopes/{id}/arquivo` | `as_envelopes`, arquivo `upload.pdf` | arquivo `original-{versao}.pdf`, e por `as_fn_anexa_arquivo` `as_envelopes` (arquivo, páginas, dimensões) e `as_campos` (apaga na troca) | `requireConta`, `validatePdf`, `as_fn_anexa_arquivo` |
+| `POST /api/painel/envelopes/{id}/arquivo` | `as_envelopes`, arquivo `upload.pdf` | arquivo `original-{versao}.pdf`, e por `as_fn_anexa_arquivo` `as_envelopes` (arquivo, páginas, dimensões; com `renomear: true`, também o título, tirado do nome do arquivo: nova tentativa do novo envelope depois de um arquivo recusado) e `as_campos` (apaga na troca) | `requireConta`, `validatePdf`, `as_fn_anexa_arquivo` |
 | `/painel/envelopes/{id}/editar` | `as_envelopes`, `as_signatarios` | via PATCH e PUT | `getCurrentAccount` |
 | `PATCH /api/painel/envelopes/{id}` | `as_envelopes` | `as_envelopes` (título, mensagem, ordem, prazo, lembrete) | `requireConta` |
 | `PUT /api/painel/envelopes/{id}/signatarios` | — | `as_signatarios`, `as_campos` | `requireConta`, `as_fn_substitui_signatarios` |
