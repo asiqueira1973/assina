@@ -21,7 +21,7 @@ Itens que dependem do Alexandre (conta, console, decisão) ou de um passo que n�
 - **P10 (20/11/2026): analytics ligado em produção.** Projeto "Assina" no Visão do Produto, com a ingestão em `https://api.visaodeproduto.com.br/functions/v1/ingest` e a chave de ingestão como variável sensitive na Vercel (também em `.env.producao-vercel.local`). Em dev continua desligado, para os testes não poluírem o painel.
   - A chave foi conferida: uma chave errada leva 401; a certa é aceita (o evento de teste foi recusado de propósito, nada gravado).
   - Depois do redeploy, uma verificação pública real gerou `assina_documento_verificado`, sem nenhum `analytics_falhou` nos logs da Vercel.
-  - Falta confirmar a chegada no painel Atividade do Visão: o conector MCP do Visão nesta sessão recusa a credencial (401).
+  - O evento apareceu no painel Atividade do Visão (confirmado pelo Alexandre em 20/11/2026).
 - **P12 e P7 (20/11/2026): deploy na Vercel.**
   - Projeto `assina` (time "asiqueira1973's projects"), ligado ao GitHub: cada push na `main` publica em produção.
   - As 19 variáveis de produção subiram pelo Vercel CLI, direto de `.env.producao-vercel.local`, com os segredos como sensitive. `SESSION_SECRET`, `CHAVES_ENC_KEY` e `CRON_SECRET` são próprios de produção. Inclui o selo autoassinado "Assina". Cadastro aberto (25.4 respondida: aberto para qualquer conta Google).
