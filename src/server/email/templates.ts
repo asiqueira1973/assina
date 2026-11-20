@@ -3,6 +3,7 @@
 // remetente deu (regra 11.16). Todo valor vindo do usuário é escapado no HTML.
 import "server-only";
 import { copy } from "@/lib/copy";
+import { formatVerificationCode } from "@/server/envelopes/verification-code";
 
 // Escapa texto para HTML.
 function esc(s: string): string {
@@ -87,7 +88,7 @@ export function completedEmail(p: { titulo: string; codigo: string; hashFinal: s
   const title = c.title(p.titulo);
   const lines = [
     ...(p.anexo ? [c.attached] : []),
-    `${c.code}: ${p.codigo}`,
+    `${c.code}: ${formatVerificationCode(p.codigo)}`,
     `${c.hash}: ${p.hashFinal}`,
     c.verify(p.site),
   ];

@@ -11,6 +11,7 @@ import { encode } from "uqr";
 import { copy } from "@/lib/copy";
 import { formatDateTimeSeconds } from "@/lib/format";
 import { maskCpf, maskEmail } from "@/lib/mask";
+import { formatVerificationCode } from "@/server/envelopes/verification-code";
 import { embedPngOnce, fitLine, safeText, wrapLines, type PdfFonts } from "./fonts";
 
 export type ManifestSigner = {
@@ -132,7 +133,7 @@ export async function appendManifest(doc: PDFDocument, data: ManifestData, fonts
   w.text(data.titulo, { size: 12 });
   w.rule();
   w.field(m.sender, `${data.remetente.nome} (${data.remetente.email})`);
-  w.field(m.code, data.codigo);
+  w.field(m.code, formatVerificationCode(data.codigo));
   w.field(m.hashOriginal, data.hash_original);
   w.field(m.sentAt, when(data.enviado_em));
   w.field(m.completedAt, when(data.concluido_em));

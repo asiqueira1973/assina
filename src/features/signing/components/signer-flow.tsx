@@ -8,7 +8,7 @@
 // O que vale é o servidor: "Documento assinado." só depois da resposta 200.
 import "@fontsource/dancing-script/400.css";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { PdfPageCanvas, usePdfDocument } from "@/features/pdf/pdf-page";
 import { copy } from "@/lib/copy";
 import { isValidCpf } from "@/lib/cpf";
@@ -34,6 +34,9 @@ type Props = {
 
 type Step = "identificar" | "codigo" | "consentir" | "documento" | "assinado" | "recusado";
 type Sheet = { kind: "assinatura" } | { kind: "rubrica" } | { kind: "texto"; fieldId: string } | null;
+
+// Assinatura vazia para o useSyncExternalStore: só distingue servidor (false) de cliente (true).
+const noSubscribe = () => () => {};
 
 // Iniciais para a rubrica digitada ("Ana Maria Souza" → "AMS").
 function initialsOf(name: string): string {
@@ -66,6 +69,10 @@ export function SignerFlow(p: Props) {
   const [declining, setDeclining] = useState(false);
   const [reason, setReason] = useState("");
   const viewed = useRef(false);
+  const [lastSigner, setLastSigner] = useState(false);
+  // O botão "Enviar código" vem pronto do servidor, mas só funciona depois que o JavaScript
+  // carrega: até lá fica desativado, para nenhum clique se perder (achado em produção, 20/11/2026).
+  const hydrated = useSyncExternalStore(noSubscribe, () => true, () => false);
   const color = signerColor(p.colorIndex);
   const api = (path: string) => `/api/assinar/${p.token}/${path}`;
 
@@ -96,7 +103,7 @@ export function SignerFlow(p: Props) {
   async function post(path: string, body?: unknown) {
     const res = await fetch(api(path), { method: "POST", headers: body ? { "content-type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
     const data = await res.json().catch(() => ({}));
-    return { ok: res.ok, data } as { ok: boolean; data: { codigo?: string; restantes?: number } };
+    return { ok: res.ok, data } as { ok: boolean; data: { codigo?: string; restantes?: number; envelope_status?: string } };
   }
 
   // Passo 1: pede o código.
@@ -184,6 +191,8 @@ export function SignerFlow(p: Props) {
     const { ok, data } = await post("assinar", body).catch(() => ({ ok: false, data: {} as { codigo?: string } }));
     setBusy(false);
     if (ok) {
+      // "finalizando": esta foi a última assinatura e o documento final já está sendo gerado.
+      setLastSigner((data as { envelope_status?: string }).envelope_status === "finalizando");
       setStep("assinado");
       return;
     }
@@ -214,7 +223,7 @@ export function SignerFlow(p: Props) {
           {step === "assinado" ? (
             <>
               <h1 className={styles.stateTitle}>{copy.signer.signed}</h1>
-              <p className={styles.muted}>{copy.signer.signedNext}</p>
+              <p className={styles.muted}>{lastSigner ? copy.signer.signedLast : copy.signer.signedNext}</p>
             </>
           ) : step === "recusado" ? (
             <h1 className={styles.stateTitle}>{copy.signer.declined(p.senderName)}</h1>
@@ -225,7 +234,7 @@ export function SignerFlow(p: Props) {
               {step === "identificar" ? (
                 <>
                   <p className={styles.muted}>{copy.signer.codeWillGo(p.maskedEmail)}</p>
-                  <button type="button" className={styles.primary} disabled={busy} aria-busy={busy} onClick={sendCode}>
+                  <button type="button" className={styles.primary} disabled={busy || !hydrated} aria-busy={busy} onClick={sendCode}>
                     {copy.signer.sendCode}
                   </button>
                 </>

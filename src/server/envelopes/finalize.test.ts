@@ -8,6 +8,7 @@ import { db } from "@/server/db/client";
 import { setMailerForTests, type EmailMessage } from "@/server/email/mailer";
 import { storage } from "@/server/files/storage";
 import { verifySeal } from "@/server/pdf/seal";
+import { formatVerificationCode } from "./verification-code";
 import { deleteTestAccounts } from "../../../tests/helpers";
 import { makePdf } from "../../../tests/fixtures/pdfs";
 import { pdfPagesText } from "../../../tests/pdf-text";
@@ -96,7 +97,7 @@ describe("finalização (épico 8.6)", () => {
     expect(pages[0]).toMatch(/\d{2}\/\d{2}\/\d{4}/); // campo data, em Brasília
     const manifest = pages.slice(1).join(" ");
     if (process.env.MOSTRAR_MANIFESTO) console.log(pages.join("\n---\n"));
-    for (const t of ["Manifesto de assinaturas", "Contrato", e.codigo_verificacao, e.hash_original!, "Ana Souza", "Bruno Lima", "Carla Dias", "a***@f.dev", "***.982.247-**", "Autenticado por código enviado ao e-mail", "UTC-3", "Assinou", "Concordou em assinar eletronicamente", "Página 1 de"]) {
+    for (const t of ["Manifesto de assinaturas", "Contrato", formatVerificationCode(e.codigo_verificacao), e.hash_original!, "Ana Souza", "Bruno Lima", "Carla Dias", "a***@f.dev", "***.982.247-**", "Autenticado por código enviado ao e-mail", "UTC-3", "Assinou", "Concordou em assinar eletronicamente", "Página 1 de"]) {
       expect(manifest).toContain(t);
     }
     expect(manifest).not.toContain("ana@f.dev");
@@ -119,7 +120,7 @@ describe("finalização (épico 8.6)", () => {
       expect(m.attachments?.[0]?.filename).toBe("Contrato.pdf");
       expect(sha256(m.attachments![0].content)).toBe(e.hash_final);
       expect(m.text).toContain(e.hash_final!);
-      expect(m.text).toContain(e.codigo_verificacao);
+      expect(m.text).toContain(formatVerificationCode(e.codigo_verificacao));
     }
     expect(done.find((m) => m.to === conta!.email)!.text).toContain(`/painel/envelopes/${env.id}`);
     void ids;

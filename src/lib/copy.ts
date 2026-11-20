@@ -303,7 +303,7 @@ export const copy = {
   mcpTools: {
     listar: { title: "Listar envelopes", description: "Lista os envelopes da conta, mais recentes primeiro, com título, situação, quantos já assinaram, datas e id. Filtre por status (\"pendentes\" = aguardando assinatura) ou busque por título ou e-mail de destinatário." },
     ver: { title: "Ver envelope", description: `Mostra um envelope: situação de cada destinatário, prazo, link do painel e os últimos ${MCP_EVENTOS_DETALHE} eventos da trilha de auditoria.` },
-    criar: { title: "Criar envelope (rascunho)", description: "Cria um envelope em rascunho. Nunca envia. Com arquivo_url (PDF em https), o arquivo é baixado e conferido; sem ele, devolve o link para a pessoa anexar o PDF no painel. Para enviar, use enviar_envelope depois de confirmar com a pessoa." },
+    criar: { title: "Criar envelope (rascunho)", description: "Cria um envelope em rascunho. Nunca envia. Com arquivo_url (PDF em https), o arquivo é baixado e conferido; sem ele, devolve o link para a pessoa anexar o PDF no painel. Um arquivo anexado na conversa não chega ao Assina: avise a pessoa logo de início e peça um link https ou use o link do painel. Para enviar, use enviar_envelope depois de confirmar com a pessoa." },
     enviar: { title: "Enviar envelope", description: "Envia um rascunho para assinatura: os destinatários recebem o convite por e-mail e o documento não pode mais ser alterado. Antes de chamar, confirme com a pessoa o título e quem vai assinar." },
     lembrar: { title: "Lembrar signatários", description: `Manda um lembrete por e-mail a quem ainda não assinou (ou só ao e-mail informado). No máximo um lembrete a cada ${LEMBRETE_MANUAL_INTERVALO_H} horas por pessoa.` },
     cancelar: { title: "Cancelar envelope", description: "Cancela um envelope enviado. Quem ainda não assinou não vai mais conseguir. Não dá para desfazer: confirme com a pessoa antes." },
@@ -315,7 +315,7 @@ export const copy = {
       id: "id do envelope",
       titulo: "título do envelope",
       signatarios: "quem recebe: nome, e-mail, papel (assinar ou copia), ordem e se pede CPF",
-      arquivo_url: `endereço https do PDF (até ${LIMITE_ARQUIVO_BYTES / 1024 / 1024} MB e ${MAX_PAGINAS} páginas)`,
+      arquivo_url: `endereço https público do PDF; não é um anexo da conversa (até ${LIMITE_ARQUIVO_BYTES / 1024 / 1024} MB e ${MAX_PAGINAS} páginas)`,
       mensagem: "mensagem que vai no convite",
       em_ordem: "assinar um de cada vez, na ordem",
       prazo_dias: `dias para assinar (${PRAZO_DIAS_MIN} a ${PRAZO_DIAS_MAX}, padrão ${PRAZO_DIAS_PADRAO})`,
@@ -459,6 +459,8 @@ export const copy = {
     confirm: "Confirmar",
     signed: "Documento assinado.",
     signedNext: "Quando todos assinarem, você recebe o documento final por e-mail.",
+    // Última assinatura: o envelope já está sendo finalizado (resposta "finalizando").
+    signedLast: "Todos assinaram. O documento final vai chegar no seu e-mail em instantes.",
     declineTitle: "Recusar este documento?",
     declineAsk: (remetente: string) => `Conte o motivo para ${remetente}.`,
     declined: (remetente: string) => `Você recusou este documento. Avisamos ${remetente}.`,
