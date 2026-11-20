@@ -13,3 +13,4 @@ supabase/.temp/
 .armazenamento-local/
 public/pdf.worker.min.mjs
 .caixa-de-saida-local/
+.vercel
