@@ -734,6 +734,16 @@ export const copy = {
       },
     ],
   },
+  // 404: endereço que não existe e envelope de outra conta (achado em produção, 20/11/2026: entrar
+  // com outra conta Google e abrir o link de um envelope dava a tela padrão do Next, em inglês).
+  notFound: {
+    title: "Página não encontrada.",
+    text: "O endereço pode estar errado ou não existir mais.",
+    home: "Ir para o início",
+    envelopeTitle: "Este envelope não está nesta conta.",
+    envelopeText: (email: string) => `Você entrou como ${email}. Se o envelope foi criado com outro e-mail, saia e entre com ele.`,
+    envelopes: "Voltar para os envelopes",
+  },
   errors: {
     generic: "Algo deu errado. Nada foi alterado. Tente de novo.",
   },

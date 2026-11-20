@@ -116,6 +116,7 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | `/` (público, página inicial) | — | — | o proxy manda quem tem sessão para `/painel` |
 | `/privacidade`, `/termos` (públicos) | — | — | `LegalPage` com `copy.legal` |
 | `/robots.txt`, `/sitemap.xml` | — | — | `src/app/robots.ts`, `src/app/sitemap.ts` |
+| 404 geral (endereço que não existe) | — | — | `src/app/not-found.tsx`, no padrão das páginas públicas, com `copy.notFound` |
 | `POST /api/painel/conta/excluir` | `as_contas` (e-mail) | apaga `as_contas` (cascata em tudo) e a pasta `{conta}/` do armazenamento; apaga o cookie da sessão | `requireConta`, `deleteAccount` |
 | `/entrar` | — | — | — |
 | `GET /api/auth/google` | — | cookie `as_oauth_google` | — |
@@ -137,6 +138,7 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | `/painel/envelopes/{id}/revisar` | `as_envelopes`, `as_signatarios`, `as_campos`, arquivo original | — | `getCurrentAccount` |
 | `POST /api/painel/envelopes/{id}/enviar` | arquivo original | `as_envelopes`, `as_signatarios`, `as_eventos`, `as_notificacoes` | `requireConta`, `validatePdf`, `as_fn_envia_envelope`, `sendInvite` |
 | `/painel/envelopes/{id}` (detalhe) | `as_envelopes`, `as_signatarios`, `as_notificacoes`, `as_eventos` (linha do tempo e `as_fn_verifica_trilha`) | via as rotas abaixo | `getEnvelope`, `getSigners`, `getTrail`, `invitesWithProblem` |
+| 404 do envelope (não existe ou é de outra conta; detalhe, editar, campos e revisar) | `as_contas` (e-mail da sessão) | — | `src/app/painel/envelopes/[id]/not-found.tsx`: mostra com qual e-mail a pessoa entrou, "Voltar para os envelopes" e "Sair" |
 | `POST …/{id}/signatarios/{sid}/lembrar` · `…/link` | — | signatário, notificações, trilha | `remindSigner`, `copySignerLink` |
 | `POST …/{id}/cancelar` · `DELETE /api/painel/envelopes/{id}` | — | via `as_fn_cancela_envelope` / `as_fn_exclui_envelope`; a exclusão apaga a pasta no armazenamento | `cancelEnvelope`, `deleteEnvelope` |
 | `GET …/{id}/arquivo?versao=` · `GET …/{id}/trilha.csv` | envelope, trilha | `as_eventos` (`baixou_*`) | `downloadUrl`, `getTrail`, `trailCsv` |
