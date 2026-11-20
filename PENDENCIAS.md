@@ -26,4 +26,3 @@ Itens que dependem do Alexandre (conta, console, decisão) ou de um passo que n�
 ## Resolvidas
 
 - **P1 (19/11/2026):** as 15 migrations `as_*` aplicadas no Supabase remoto pelo MCP, com o mesmo SQL dos arquivos. A comparação das definições (funções, colunas e triggers) com o local deu hashes idênticos. Advisors filtrados a `as_*`: segurança só com "RLS sem política" (intencional, seção 6.5); performance com uma chave estrangeira sem índice, corrigida em `20261120120000_as_indice_credencial_oauth.sql`, e índices ainda não usados (banco vazio).
-_(nada ainda)_
