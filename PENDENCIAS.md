@@ -6,7 +6,6 @@ Itens que dependem do Alexandre (conta, console, decisão) ou de um passo que n�
 
 | # | O quê | Por que está parado | Como resolver | Bloqueia |
 |---|---|---|---|---|
-| P2 | **Criar o bucket R2** `assina-documentos` (privado, CORS, token restrito ao bucket) e preencher `R2_*` no `.env.local` e na Vercel | Precisa da conta Cloudflare da DabLab | README, seção "Cloudflare R2". Depois: teste manual de 403 sem assinatura e com URL vencida, e um upload real pelo painel | Upload real; em dev e nos testes o app usa o armazenamento local em disco (`plans/8.2-novo-envelope.md`) |
 | P3 | **Criar o cliente OAuth do Google** no projeto próprio "Assina" e preencher `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` | Precisa do console do Google Cloud | README, seção "Google Cloud". Depois: login real e conferir que o consentimento pede só nome, e-mail e foto | Login real (hoje só com Google simulado e sessão de dev) |
 | P4 | **Testar os hooks dentro de uma sessão em `~/assina`** (pedir uma edição proibida e ver o bloqueio) | Os hooks foram testados chamando os scripts diretamente. E a sessão que fez os épicos 8.1 e 8.2 nasceu no agenda-psi: mesmo depois de mudar de pasta, os hooks que disparavam eram os de lá (`$CLAUDE_PROJECT_DIR` herdado). Os arquivos foram conferidos rodando os guardas do Assina à mão | Pedir, por exemplo, "escreve SUPABASE_SERVICE_ROLE_KEY em src/app/x.tsx" e conferir que é barrado | Nada; é prova de integração |
 | P5 | **Conta e domínio no Resend:** verificar `assina.app.br` (SPF, DKIM, DMARC), criar a chave e preencher `RESEND_API_KEY` e `EMAIL_REMETENTE=naoresponda@assina.app.br` no `.env.local` e na Vercel | Precisa da conta Resend e do DNS do domínio | Painel do Resend → Domains → Add domain, e os registros no DNS do `assina.app.br`. Depois: mandar um envelope de teste para um e-mail real | E-mail real; em dev os e-mails vão para `.caixa-de-saida-local/` (`plans/8.4-revisar-e-enviar.md`) |
@@ -25,4 +24,12 @@ Itens que dependem do Alexandre (conta, console, decisão) ou de um passo que n�
 
 ## Resolvidas
 
+- **P2 (19/11/2026):** bucket R2 `assina-documentos` criado (privado), token restrito ao bucket (Object Read & Write) e CORS para `https://assina.app.br` e `http://localhost:3030`. Conferido:
+  - upload pela URL assinada, leitura pelo servidor e download assinado funcionam;
+  - acesso sem assinatura é recusado;
+  - o preflight do CORS aceita as duas origens e recusa as outras;
+  - pelo navegador, o upload do painel vai direto ao R2 e o editor lê o PDF de lá pelo pdf.js, sem erro de CSP;
+  - a exclusão da conta esvazia a pasta no bucket.
+
+  Falta pôr as quatro variáveis `R2_*` na Vercel (P12).
 - **P1 (19/11/2026):** as 15 migrations `as_*` aplicadas no Supabase remoto pelo MCP, com o mesmo SQL dos arquivos. A comparação das definições (funções, colunas e triggers) com o local deu hashes idênticos. Advisors filtrados a `as_*`: segurança só com "RLS sem política" (intencional, seção 6.5); performance com uma chave estrangeira sem índice, corrigida em `20261120120000_as_indice_credencial_oauth.sql`, e índices ainda não usados (banco vazio).
