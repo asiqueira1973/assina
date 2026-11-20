@@ -53,9 +53,10 @@ describe("manifesto (regra 11.9)", () => {
     const pages = await pdfPagesText(await manifestPdf());
     expect(pages.length).toBeGreaterThan(1); // 60 eventos não cabem numa página
     const all = pages.join(" ");
-    for (const t of ["Manifesto de assinaturas", "Contrato de prestação de serviços", "Clínica Exemplo", "7K2M9QXH4T1B", "a".repeat(64), "a***@exemplo.com", "***.982.247-**", "Lukasz Kowalski", "2001:db8::1", "c***@exemplo.com", "10/11/2026 10:00:00 UTC-3"]) {
+    for (const t of ["Manifesto de assinaturas", "Contrato de prestação de serviços", "Clínica Exemplo", "7K2M-9QXH-4T1B", "a".repeat(64), "a***@exemplo.com", "***.982.247-**", "Lukasz Kowalski", "2001:db8::1", "c***@exemplo.com", "10/11/2026 10:00:00 UTC-3"]) {
       expect(all).toContain(t);
     }
+    // O código aparece como XXXX-XXXX-XXXX, igual ao painel (regra 11.11 e coluna do spec, seção 7).
     // E-mail maior que a linha: quebra em pedaços, sem perder nada.
     expect(all.replace(/\s/g, "")).toContain(data.remetente.email);
     expect(all).not.toContain("ana.souza@exemplo.com");
