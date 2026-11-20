@@ -29,6 +29,10 @@ Suba um PDF de até 10 MB e 100 páginas. Diga quem assina e quem só recebe có
 
 Quem assina recebe um link por e-mail e confirma que é dono do endereço com um código de 6 dígitos. Depois concorda em assinar eletronicamente, percorre os campos e assina digitando o nome, que vira letra cursiva, ou desenhando. Pode também recusar, dizendo o motivo.
 
+<p align="center">
+  <img src="docs/images/email-convite.png" width="70%" alt="O convite no Outlook: 'ALEXANDRE SIQUEIRA enviou um documento para você assinar', o título Contrato de teste, a mensagem do remetente, o prazo e o botão Revisar e assinar">
+</p>
+
 ![Página de quem assina: a janela "Sua assinatura" com as abas Digitar e Desenhar e o nome Lucas Ferreira em letra cursiva](docs/images/assinatura.png)
 
 <p align="center">
@@ -62,6 +66,16 @@ Em [assina.app.br/verificar](https://assina.app.br/verificar), qualquer pessoa c
 - **API REST v1** com chave por conta: criar envelope (com o PDF por URL ou upload), enviar, acompanhar, lembrar, cancelar e baixar. O contrato está em OpenAPI 3.1, em [/docs/api](https://assina.app.br/docs/api).
 - **Webhooks** assinados com HMAC: quem assinou, concluído, recusado, cancelado e expirado.
 - **Servidor MCP** com login OAuth: conecte no Claude ou no ChatGPT, peça "manda este contrato para a Ana assinar" e acompanhe de lá. Criar o envelope só gera o rascunho; enviar é uma ação à parte, que o assistente pede para você confirmar.
+
+No Claude, basta pedir em português. O conector lista e mostra os envelopes, cria o rascunho e devolve o link para posicionar os campos no painel. Na trilha de auditoria, o envelope aparece como criado pelo MCP.
+
+<p align="center">
+  <img src="docs/images/claude-listar.png" width="48%" alt="No Claude: 'me liste os envelopes que eu tenho no Assina'. O Claude usa Listar envelopes e responde que há um envelope, Contrato de teste, concluído">
+  &nbsp;
+  <img src="docs/images/claude-criar.png" width="48%" alt="No Claude: o rascunho 'Contrato do Cliente XYZ' criado com o signatário, o prazo de 30 dias e o link do painel para anexar o PDF e posicionar os campos; nada é enviado sem confirmação">
+</p>
+
+![Detalhe do Contrato do Cliente XYZ: a trilha de auditoria começa com 'Envelope criado · MCP' e segue com o envio, o convite, o código e a assinatura](docs/images/trilha-mcp.png)
 
 ## O que o Assina é e o que não é
 
@@ -306,7 +320,11 @@ No Claude Code, o mesmo pode ser feito pela linha de comando: `claude mcp add --
 
 As ferramentas são `listar_envelopes`, `ver_envelope`, `criar_envelope` (só rascunho; nunca envia), `enviar_envelope` (o assistente confirma antes), `lembrar_signatarios`, `cancelar_envelope` e `link_do_documento`. O MCP não exclui envelope e não mexe na chave nem no webhook.
 
-Os prints de cada passo entram quando houver deploy (PENDENCIAS P9).
+<p align="center">
+  <img src="docs/images/claude-conector.png" width="48%" alt="No Claude, a janela Add custom connector com o nome Assina e a URL https://assina.app.br/mcp">
+  &nbsp;
+  <img src="docs/images/claude-permitir.png" width="44%" alt="A tela do Assina: 'Claude quer acessar seu Assina.' Vai poder ver os envelopes, criar rascunhos, enviar, lembrar e cancelar; não vai poder excluir envelopes nem ver a chave de API. Botões Cancelar e Permitir">
+</p>
 
 ## Analytics no Visão do Produto (épico 8.11)
 
