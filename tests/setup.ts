@@ -38,6 +38,9 @@ process.env.ADMIN_EMAIL = "admin@assina.test";
 // ou aponta para um servidor local.
 delete process.env.VISAO_INGEST_URL;
 delete process.env.VISAO_API_KEY;
+// Arquivos: os testes usam sempre o armazenamento local, nunca o bucket R2 de verdade (o
+// .env.local de quem desenvolve pode ter as chaves).
+for (const k of ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET"]) delete process.env[k];
 
 // Espera o Supabase local responder antes dos testes (até 60 s).
 async function waitForLocalSupabase(timeoutMs = 60000): Promise<void> {
