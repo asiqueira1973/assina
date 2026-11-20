@@ -380,4 +380,4 @@ Para conferir depois de criar, rode `for i in $(seq 1 35); do curl -s -o /dev/nu
 
 [MIT](LICENSE). Referência funcional: [SignuDoc](https://github.com/NYLLON-SOFTWARE/signudoc) (MIT); todo código adaptado dele leva atribuição em `THIRD_PARTY_NOTICES.md`.
 
-Feito pela [Dab Lab](https://www.dablab.com.br/), agência de inovação no-code para startups e PMEs, com automações usando IA.
+Feito pela [Dab Lab](https://www.dablab.com.br/), product studio de software e IA que constrói apps para pequenas empresas, startups e áreas dentro de grandes empresas, partindo de uma especificação (Spec-Driven Development) e com as disciplinas de engenharia de software robusta.
