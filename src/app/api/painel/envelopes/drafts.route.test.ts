@@ -110,6 +110,29 @@ describe("rascunho de envelope (épico 8.2)", () => {
     expect(await storage().read(antes!.arquivo_original_path!, 1e8)).toBeNull();
   });
 
+  // Achado em produção (20/11/2026): o primeiro PDF do novo envelope foi recusado (página grande
+  // demais) e o segundo entrou no mesmo rascunho com o título do primeiro.
+  it("novo envelope: arquivo recusado e outro aceito → o título passa a ser o do aceito; trocar arquivo depois não mexe no título", async () => {
+    const a = await account();
+    const created = await (await createEnvelope(apiRequest("/api/painel/envelopes", { method: "POST", cookie: a.cookie, body: { nome_arquivo: "PROJ_BBZ_7o_ANDAR.pdf" } }))).json();
+    const id = created.envelope.id as string;
+    await uploadTo(created.upload_url, makeDocxBytes());
+    expect((await attachFile(apiRequest(`/api/painel/envelopes/${id}/arquivo`, { method: "POST", cookie: a.cookie, body: { nome_arquivo: "PROJ_BBZ_7o_ANDAR.pdf" } }), ctx(id))).status).toBe(400);
+
+    // Nova tentativa no mesmo rascunho: o navegador pede para o título acompanhar o arquivo.
+    let up = await (await newUpload(apiRequest(`/api/painel/envelopes/${id}/upload`, { method: "POST", cookie: a.cookie }), ctx(id))).json();
+    await uploadTo(up.upload_url, await makePdf(1));
+    let res = await attachFile(apiRequest(`/api/painel/envelopes/${id}/arquivo`, { method: "POST", cookie: a.cookie, body: { nome_arquivo: "Ordem_de_servico.pdf", renomear: true } }), ctx(id));
+    expect(res.status).toBe(200);
+    expect((await res.json()).envelope.titulo).toBe("Ordem de servico");
+
+    // Trocar o arquivo pelo botão "Trocar" (sem renomear) mantém o título que já está lá.
+    up = await (await newUpload(apiRequest(`/api/painel/envelopes/${id}/upload`, { method: "POST", cookie: a.cookie }), ctx(id))).json();
+    await uploadTo(up.upload_url, await makePdf(2));
+    res = await attachFile(apiRequest(`/api/painel/envelopes/${id}/arquivo`, { method: "POST", cookie: a.cookie, body: { nome_arquivo: "Outro.pdf" } }), ctx(id));
+    expect((await res.json()).envelope.titulo).toBe("Ordem de servico");
+  });
+
   it("configurações: salva título, mensagem vazia vira nula, recusa prazo e lembrete fora da regra", async () => {
     const a = await account();
     const { id } = await draftWithFile(a.cookie, await makePdf(1));
