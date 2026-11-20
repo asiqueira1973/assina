@@ -1,9 +1,12 @@
-// npm run selo:gerar — gera um certificado autoassinado .p12 para o selo em dev (regra 11.10,
-// pendência 25.2) e imprime as linhas de SELO_P12_BASE64 e SELO_P12_SENHA para o .env.local.
+// npm run selo:gerar — gera um certificado autoassinado .p12 para o selo (regra 11.10, decisão
+// 25.2: autoassinado no lançamento) e imprime as linhas de SELO_P12_BASE64 e SELO_P12_SENHA.
+// Sem argumento: "Assina (dev)", para o .env.local. Com `-- --producao`: "Assina", o nome que o
+// leitor de PDF mostra no selo em produção (variáveis da Vercel).
 // Nunca grava arquivo: o certificado só existe na saída deste comando.
 import { randomBytes } from "node:crypto";
 import forge from "node-forge";
 
+const producao = process.argv.includes("--producao");
 const keys = forge.pki.rsa.generateKeyPair(2048);
 const cert = forge.pki.createCertificate();
 cert.publicKey = keys.publicKey;
@@ -11,7 +14,7 @@ cert.serialNumber = "01" + randomBytes(8).toString("hex");
 cert.validity.notBefore = new Date();
 cert.validity.notAfter = new Date(Date.now() + 5 * 365 * 86400_000);
 const subject = [
-  { name: "commonName", value: "Assina (dev)" },
+  { name: "commonName", value: producao ? "Assina" : "Assina (dev)" },
   { name: "organizationName", value: "DabLab" },
   { name: "countryName", value: "BR" },
 ];

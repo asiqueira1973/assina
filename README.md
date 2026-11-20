@@ -110,7 +110,11 @@ O plano grátis do Resend tem limite diário de envios; a decisão sobre o plano
 
 O PDF final leva um selo PAdES da plataforma (regra 11.10). O selo só garante a integridade do arquivo; não é a assinatura de quem assinou.
 
-1. **Certificado.** Para dev (e para o MVP, até a decisão 25.2): `npm run selo:gerar`. O comando imprime `SELO_P12_BASE64=…` e `SELO_P12_SENHA=…` e não grava nenhum arquivo. Cole as duas linhas no `.env.local`, ou, em produção, nas variáveis da Vercel. Com o certificado autoassinado, o Adobe Reader mostra "identidade desconhecida", o que é esperado.
+1. **Certificado.** Decisão 25.2: autoassinado no lançamento. O comando imprime `SELO_P12_BASE64=…` e `SELO_P12_SENHA=…` e não grava nenhum arquivo.
+   - **Dev:** `npm run selo:gerar` gera o certificado "Assina (dev)". Cole as duas linhas no `.env.local`.
+   - **Produção:** `npm run selo:gerar -- --producao` gera o certificado "Assina", o nome que o leitor de PDF mostra no selo. Ponha as duas linhas nas variáveis da Vercel e guarde uma cópia num cofre de senhas.
+
+   Com o autoassinado, o Adobe Reader mostra "identidade desconhecida", o que é esperado. Trocar o certificado depois (por exemplo, por um e-CNPJ A1) não invalida os PDFs já selados.
 2. **Carimbo do tempo (opcional).** `SELO_TSA_URL` com uma TSA RFC 3161 gratuita. Em 17/11/2026 responderam em cerca de 0,5 s: `http://timestamp.digicert.com`, `https://freetsa.org/tsr` e `http://timestamp.sectigo.com`. Com resposta em até 5 s, o selo é `B-T`; sem resposta, `B-B`, e o envelope conclui do mesmo jeito.
 3. **Alerta.** `ADMIN_EMAIL` recebe o "[Assina] Finalização falhou 3 vezes".
 4. **Conferir um PDF selado.** Basta abrir no Adobe Reader. Pela linha de comando:
