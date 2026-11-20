@@ -3,6 +3,7 @@
 // Fora do índice dos buscadores (seção 17: só /verificar é indexável).
 import Link from "next/link";
 import { Suspense } from "react";
+import { SiteFooter } from "@/features/public/components/site-footer";
 import { VerifyResult } from "@/features/verify/components/verify-result";
 import styles from "@/features/verify/components/verify.module.css";
 import { copy } from "@/lib/copy";
@@ -34,7 +35,7 @@ export default function VerificarCodigoPage(props: Props) {
   return (
     <main className={styles.page}>
       <div className={styles.column}>
-        <p className={styles.brand}>{copy.appName}</p>
+        <Link className={styles.brand} href="/">{copy.appName}</Link>
         <h1 className={styles.title}>{copy.verify.title}</h1>
         <Suspense fallback={<div className={styles.card} aria-busy="true" />}>
           <Result {...props} />
@@ -43,6 +44,7 @@ export default function VerificarCodigoPage(props: Props) {
           {copy.verify.again}
         </Link>
       </div>
+      <SiteFooter />
     </main>
   );
 }

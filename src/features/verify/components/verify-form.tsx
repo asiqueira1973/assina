@@ -2,7 +2,8 @@
 // Formulário da verificação (critério 8.8). Dois caminhos:
 // - arquivo: o navegador calcula o SHA-256 com a Web Crypto e manda só o hash para
 //   /api/verificar (o PDF não sai do computador);
-// - código: normaliza (minúsculas, hífens, O→0, I/L→1) e abre /verificar/{codigo}.
+// - código: normaliza (minúsculas, hífens, O→0, I/L→1) e abre /verificar/{codigo}; com
+//   inline (dentro do painel, /painel/verificar), consulta a API e mostra o resultado ali mesmo.
 // Mostra "Conferindo o arquivo…", o resultado e "Verificar outro documento".
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -24,7 +25,7 @@ async function sha256Hex(file: File): Promise<string> {
   ).join("");
 }
 
-export function VerifyForm() {
+export function VerifyForm({ inline = false }: { inline?: boolean } = {}) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -38,6 +39,21 @@ export function VerifyForm() {
   useEffect(() => {
     if (result) resultRef.current?.focus();
   }, [result]);
+
+  // Busca pelo código sem sair da tela (modo inline). Mesma API pública da página do código.
+  async function checkCode(codigo: string) {
+    setBusy(true);
+    setCodeError(null);
+    try {
+      const res = await fetch(`/api/verificar?codigo=${codigo}`);
+      if (!res.ok) throw new Error("falhou");
+      setResult((await res.json()) as VerificationResult);
+    } catch {
+      setCodeError(copy.errors.generic);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function check(file: File | undefined) {
     if (!file || busy) return;
@@ -123,7 +139,8 @@ export function VerifyForm() {
               setCodeError(copy.verify.codeInvalid);
               return;
             }
-            router.push(`/verificar/${normalized}`);
+            if (inline) void checkCode(normalized);
+            else router.push(`/verificar/${normalized}`);
           }}
         >
           <label className={styles.codeLabel} htmlFor="codigo">

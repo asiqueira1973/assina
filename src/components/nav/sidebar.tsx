@@ -1,7 +1,8 @@
 "use client";
 // Menu lateral do painel — seção 16 (padrão App Store Connect, igual ao Reunião).
 // Grupos em negrito escuro (Documentos, Configurar), itens indentados sem marcador, hairline entre
-// grupos, um item ativo em azul com pílula clara; rodapé com nome, e-mail e "Verificar documento".
+// grupos, um item ativo em azul com pílula clara; rodapé com nome e e-mail. "Verificar documento"
+// é item de Documentos e abre /painel/verificar (desde 20/11/2026; antes ficava no rodapé).
 // Sair fica na tela Conta (seção 16). Abaixo de 1024 px vira gaveta aberta pelo botão do topo.
 // usePathname exige <Suspense>: o SidebarView puro serve de fallback, sem item ativo.
 import Link from "next/link";
@@ -19,6 +20,8 @@ const GROUPS = [
     items: [
       { href: "/painel", label: copy.nav.envelopes },
       { href: "/painel/envelopes/novo", label: copy.nav.newEnvelope },
+      // Dentro do painel, para não sair do sistema (sugestão do Petr, 20/11/2026).
+      { href: "/painel/verificar", label: copy.nav.verify },
     ],
   },
   {
@@ -86,9 +89,6 @@ export function SidebarView({ activeHref, name, email }: Props & { activeHref: s
         <div className={styles.footer}>
           <p className={styles.footerName}>{name}</p>
           <p className={styles.footerEmail}>{email}</p>
-          <Link className={styles.footerLink} href="/verificar">
-            {copy.nav.verify}
-          </Link>
         </div>
       </nav>
     </>

@@ -1,5 +1,6 @@
 // Resultado da verificação (critério 8.8, regra 11.11). Só apresentação, sem estado: a página do
 // código (servidor) e o formulário (cliente) usam o mesmo componente. Mostra a frase da seção 15
+// (e, desde 20/11/2026, o que cada resultado prova: o arquivo íntegro ou só o envelope do código)
 // e o resumo permitido: título, situação, enviado e concluído em (Brasília), selo, e os nomes
 // dos assinantes com a data e a hora da assinatura.
 import { StatusPill } from "@/features/envelopes/components/status-pill";
@@ -69,8 +70,20 @@ export function VerifyResult({ result }: { result: VerificationResult }) {
   }
   return (
     <div className={styles.column}>
-      {result.resultado === "final" ? <p className={`${styles.headline} ${styles.ok}`}>{v.final}</p> : null}
+      {result.resultado === "final" ? (
+        <div className={`${styles.headline} ${styles.ok}`}>
+          <p className={styles.headlineText}>{v.final}</p>
+          <p className={styles.headlineDetail}>{v.finalDetail}</p>
+        </div>
+      ) : null}
       {result.resultado === "original" ? <p className={`${styles.headline} ${styles.info}`}>{v.original}</p> : null}
+      {/* Pelo código, o resumo prova que o envelope existe, não que um arquivo é o assinado (Petr, 20/11/2026). */}
+      {result.resultado === "codigo" ? (
+        <div className={`${styles.headline} ${styles.info}`}>
+          <p className={styles.headlineText}>{v.codeFound}</p>
+          <p className={styles.headlineDetail}>{v.codeHint}</p>
+        </div>
+      ) : null}
       {result.envelopes.map((e, i) => (
         <Summary key={i} e={e} />
       ))}

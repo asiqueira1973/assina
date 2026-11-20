@@ -406,8 +406,12 @@ export const copy = {
   // Seção 15.1, "Verificar" (épico 8.8, textos extras na v0.11).
   verify: {
     title: "Verificar um documento",
-    intro: "Arraste o PDF assinado ou digite o código que aparece no manifesto. O arquivo não sai do seu computador.",
+    // Pedido do Petr (20/11/2026): dizer o que a verificação prova e o que cada resultado significa.
+    intro: "Confira se um documento assinado pelo Assina é autêntico e se não foi alterado depois das assinaturas. Arraste o PDF ou digite o código que aparece no manifesto. O arquivo não sai do seu computador.",
     final: "Documento assinado e íntegro.",
+    finalDetail: "Este arquivo é exatamente o que o Assina selou: nada foi alterado depois das assinaturas.",
+    codeFound: "Este código é de um envelope do Assina.",
+    codeHint: "Para conferir se o seu PDF é exatamente o assinado, arraste o arquivo na verificação.",
     original: "Este é o documento original, antes das assinaturas.",
     notFound: "Não encontramos este documento. Ele pode ter sido alterado depois de assinado ou excluído pelo remetente.",
     notConcluded: "Este envelope ainda não foi concluído.",

@@ -144,6 +144,7 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 | `GET …/{id}/arquivo?versao=` · `GET …/{id}/trilha.csv` | envelope, trilha | `as_eventos` (`baixou_*`) | `downloadUrl`, `getTrail`, `trailCsv` |
 | `/verificar` (público) | — (o hash é calculado no navegador) | — | `VerifyForm` → `GET /api/verificar?hash=` |
 | `/verificar/{codigo}` (público, o QR do manifesto) e `GET /api/verificar?codigo=` | envelopes, signatários, contas | — | `verifyDocument` → `as_fn_verifica_documento` |
+| `/painel/verificar` (remetente, item "Verificar documento" do menu) | — | — | `VerifyForm inline`: o arquivo pelo hash e o código por `GET /api/verificar?codigo=`, com o resultado na própria tela |
 | `/api/v1/*` (API REST) | as do domínio | as do domínio, com origem e ator `api` | `requireCredential` (só chave de API) → `apiRoute` → as funções de `src/server/envelopes/` |
 | `/painel/integracoes` e `POST /api/painel/integracoes/{chave,revelar,webhook,webhook/teste}` | `as_credenciais`, `as_contas` | `as_credenciais` (troca), `as_contas` (webhook) | `integrationsView`, `rotateApiKey`, `revealSecret`, `saveWebhookUrl`, `sendTestWebhook` |
 | `/docs/api` (público) e `GET /api/v1/openapi.json` | — | — | `openApiDocument` |
@@ -223,7 +224,8 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 - **Integrações:** a página só recebe o prefixo da chave e a URL. A chave e o segredo em claro saem por `POST /api/painel/integracoes/revelar`, sem cache, quando a pessoa pede. O segredo `whsec_…` nasce com a primeira URL, continua o mesmo quando a URL muda e sai junto com a URL removida.
 - **Verificação pública (épico 8.8):**
   - `/verificar` (`VerifyForm`, cliente) calcula o SHA-256 do PDF com a Web Crypto e manda só o hash para `GET /api/verificar`; o arquivo não sai do computador.
-  - O código passa por `normalizeVerificationCode` (`src/lib/verification-code.ts`: minúsculas, espaços, hífens, O→0, I/L→1) e abre `/verificar/{codigo}`, que é renderizada no servidor.
+  - O código passa por `normalizeVerificationCode` (`src/lib/verification-code.ts`: minúsculas, espaços, hífens, O→0, I/L→1) e abre `/verificar/{codigo}`, que é renderizada no servidor. Dentro do painel (`inline`), consulta `GET /api/verificar?codigo=` e mostra o resultado ali mesmo.
+  - Nas páginas públicas da verificação, "Assina" leva a `/` e o rodapé é o `SiteFooter`. O resultado diz o que prova: "Documento assinado e íntegro." (arquivo) ou "Este código é de um envelope do Assina." (código, sem provar que um arquivo é o assinado).
   - As duas usam `verifyDocument` (`src/server/verification/lookup.ts`) e o mesmo `VerifyResult`.
   - A resposta da API é `no-store`.
   - Só `/verificar` é indexável; `/verificar/{codigo}` fica com o `noindex` do layout.
