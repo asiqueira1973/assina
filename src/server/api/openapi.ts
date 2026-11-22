@@ -260,7 +260,7 @@ export function openApiDocument() {
             em_ordem: { type: "boolean" },
             prazo_dias: { type: "integer", minimum: PRAZO_DIAS_MIN, maximum: PRAZO_DIAS_MAX },
             lembrete_cada_dias: { type: ["integer", "null"], enum: [2, 3, 7, null] },
-            arquivo_url: { type: "string", format: "uri", description: "Só https; IP público; até " + REMOTO_REDIRECIONAMENTOS + " redirecionamentos; " + REMOTO_S + " s; até " + MB + " MB." },
+            arquivo_url: { type: "string", format: "uri", description: "Só https; IP público; link de compartilhamento do Google Drive ou do Dropbox vira o download direto; até " + REMOTO_REDIRECIONAMENTOS + " redirecionamentos; " + REMOTO_S + " s; até " + MB + " MB." },
             nome_arquivo: { type: "string", maxLength: NOME_ARQUIVO_MAX },
             signatarios: {
               type: "array",

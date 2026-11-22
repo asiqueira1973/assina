@@ -1,11 +1,13 @@
 // Arquivo do rascunho a partir de uma URL — regra 11.18 (API e MCP). Baixa pelo fetch protegido
 // contra SSRF (só https, IP público conferido na conexão e em cada redirecionamento, no máximo 3,
 // 10 s, corta em 10 MB; o Content-Type não importa, vale o %PDF-), grava como upload.pdf e segue
-// o mesmo caminho do upload do navegador (attachUploadedFile: regra 11.1).
+// o mesmo caminho do upload do navegador (attachUploadedFile: regra 11.1). Link de compartilhamento
+// do Google Drive ou do Dropbox vira antes o download direto (share-links.ts, 22/11/2026).
 import "server-only";
 import { LIMITE_ARQUIVO_BYTES, REMOTO_REDIRECIONAMENTOS, REMOTO_TIMEOUT_MS } from "@/lib/limits";
 import { envelopePaths, storage } from "@/server/files/storage";
 import { fetchRemote, RemoteFetchError } from "@/server/files/fetch-remote";
+import { directDownloadUrl } from "@/server/files/share-links";
 import { attachUploadedFile, DraftError } from "./drafts";
 
 // Baixa e anexa. Recebe: conta, envelope, URL e nome do arquivo. Devolve: o resultado do anexo.
@@ -13,7 +15,7 @@ import { attachUploadedFile, DraftError } from "./drafts";
 export async function attachFromUrl(contaId: string, envelopeId: string, url: string, filename: string) {
   let body: Uint8Array;
   try {
-    const res = await fetchRemote(url, { maxBytes: LIMITE_ARQUIVO_BYTES, timeoutMs: REMOTO_TIMEOUT_MS, maxRedirects: REMOTO_REDIRECIONAMENTOS });
+    const res = await fetchRemote(directDownloadUrl(url), { maxBytes: LIMITE_ARQUIVO_BYTES, timeoutMs: REMOTO_TIMEOUT_MS, maxRedirects: REMOTO_REDIRECIONAMENTOS });
     if (res.status < 200 || res.status >= 300) throw new DraftError("download_falhou");
     body = res.body;
   } catch (e) {

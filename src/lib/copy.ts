@@ -312,7 +312,7 @@ export const copy = {
   mcpTools: {
     listar: { title: "Listar envelopes", description: "Lista os envelopes da conta, mais recentes primeiro, com título, situação, quantos já assinaram, datas e id. Filtre por status (\"pendentes\" = aguardando assinatura) ou busque por título ou e-mail de destinatário." },
     ver: { title: "Ver envelope", description: `Mostra um envelope: situação de cada destinatário, prazo, link do painel e os últimos ${MCP_EVENTOS_DETALHE} eventos da trilha de auditoria.` },
-    criar: { title: "Criar envelope (rascunho)", description: "Cria um envelope em rascunho. Nunca envia. Com arquivo_url (PDF em https), o arquivo é baixado e conferido; sem ele, devolve o link para a pessoa anexar o PDF no painel. Um arquivo anexado na conversa não chega ao Assina: avise a pessoa logo de início e peça um link https ou use o link do painel. Para enviar, use enviar_envelope depois de confirmar com a pessoa." },
+    criar: { title: "Criar envelope (rascunho)", description: "Cria um envelope em rascunho. Nunca envia. Quando a pessoa passar um link do PDF, mande-o em arquivo_url: vale um endereço https público, inclusive o link de compartilhamento do Google Drive ou do Dropbox (aberto para qualquer pessoa com o link); o arquivo é baixado e conferido. Sem link, devolve o endereço do painel para anexar o PDF. Só um arquivo anexado direto na conversa não chega ao Assina: nesse caso, peça o link ou use o painel. Para enviar, use enviar_envelope depois de confirmar com a pessoa." },
     enviar: { title: "Enviar envelope", description: "Envia um rascunho para assinatura: os destinatários recebem o convite por e-mail e o documento não pode mais ser alterado. Antes de chamar, confirme com a pessoa o título e quem vai assinar e, se não houver campos posicionados (o normal pelo MCP), avise que a assinatura aparece no manifesto ao final e num selo no rodapé de cada página, não sobre as linhas do documento." },
     lembrar: { title: "Lembrar signatários", description: `Manda um lembrete por e-mail a quem ainda não assinou (ou só ao e-mail informado). No máximo um lembrete a cada ${LEMBRETE_MANUAL_INTERVALO_H} horas por pessoa.` },
     cancelar: { title: "Cancelar envelope", description: "Cancela um envelope enviado. Quem ainda não assinou não vai mais conseguir. Não dá para desfazer: confirme com a pessoa antes." },
@@ -324,7 +324,7 @@ export const copy = {
       id: "id do envelope",
       titulo: "título do envelope",
       signatarios: "quem recebe: nome, e-mail, papel (assinar ou copia), ordem e se pede CPF e data de nascimento",
-      arquivo_url: `endereço https público do PDF; não é um anexo da conversa (até ${LIMITE_ARQUIVO_BYTES / 1024 / 1024} MB e ${MAX_PAGINAS} páginas)`,
+      arquivo_url: `endereço https público do PDF, ou o link de compartilhamento do Google Drive ou do Dropbox (até ${LIMITE_ARQUIVO_BYTES / 1024 / 1024} MB e ${MAX_PAGINAS} páginas)`,
       mensagem: "mensagem que vai no convite",
       em_ordem: "assinar um de cada vez, na ordem",
       prazo_dias: `dias para assinar (${PRAZO_DIAS_MIN} a ${PRAZO_DIAS_MAX}, padrão ${PRAZO_DIAS_PADRAO})`,

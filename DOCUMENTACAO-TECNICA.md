@@ -214,6 +214,7 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
     - o IP é conferido no lookup do próprio socket, contra DNS rebinding;
     - bloqueia privado, loopback, link-local, CGNAT, ULA e metadado de nuvem;
     - até 3 redirecionamentos conferidos de novo, 10 s e 10 MB.
+    - antes, `directDownloadUrl` (`src/server/files/share-links.ts`) troca o link de compartilhamento do Google Drive pelo download direto (`drive.usercontent.google.com/download?…&confirm=t`) e põe `dl=1` no do Dropbox; o arquivo precisa estar aberto para qualquer pessoa com o link.
   - O documento OpenAPI (`src/server/api/openapi.ts`) é validado no teste.
 - **Webhooks (`src/server/webhooks/deliver.ts`):**
   - As entregas nascem na transação do fato:
