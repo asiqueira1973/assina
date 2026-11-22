@@ -235,6 +235,13 @@ export const copy = {
     legal: (site: string) =>
       `Documento assinado eletronicamente pela plataforma Assina (DabLab). As assinaturas acima foram feitas por pessoas que comprovaram o acesso ao próprio e-mail por código de uso único, nos termos do art. 10, § 2º, da Medida Provisória 2.200-2/2001. A integridade deste arquivo é protegida por selo eletrônico da plataforma e pode ser conferida em ${site}/verificar.`,
     pageOf: (n: number, total: number) => `Página ${n} de ${total} do manifesto`,
+    // Selo de rodapé nas páginas do documento quando alguém assinou sem campo posicionado
+    // (emenda de 22/11/2026, regra 11.9). quem = nomes, "Ana e mais 2" ou "3 pessoas".
+    footer: (quem: string, data: string, codigo: string, verificar: string) =>
+      `Assinado eletronicamente por ${quem} em ${data} · Código ${codigo} · ${verificar}`,
+    footerAnd: (nomes: string[]) => (nomes.length === 1 ? nomes[0] : `${nomes.slice(0, -1).join(", ")} e ${nomes[nomes.length - 1]}`),
+    footerOthers: (primeiro: string, n: number) => `${primeiro} e mais ${n}`,
+    footerPeople: (n: number) => `${n} pessoas`,
     actors: { sistema: "Assina", api: "API", mcp: "MCP" },
     none: "—",
   },
@@ -306,7 +313,7 @@ export const copy = {
     listar: { title: "Listar envelopes", description: "Lista os envelopes da conta, mais recentes primeiro, com título, situação, quantos já assinaram, datas e id. Filtre por status (\"pendentes\" = aguardando assinatura) ou busque por título ou e-mail de destinatário." },
     ver: { title: "Ver envelope", description: `Mostra um envelope: situação de cada destinatário, prazo, link do painel e os últimos ${MCP_EVENTOS_DETALHE} eventos da trilha de auditoria.` },
     criar: { title: "Criar envelope (rascunho)", description: "Cria um envelope em rascunho. Nunca envia. Com arquivo_url (PDF em https), o arquivo é baixado e conferido; sem ele, devolve o link para a pessoa anexar o PDF no painel. Um arquivo anexado na conversa não chega ao Assina: avise a pessoa logo de início e peça um link https ou use o link do painel. Para enviar, use enviar_envelope depois de confirmar com a pessoa." },
-    enviar: { title: "Enviar envelope", description: "Envia um rascunho para assinatura: os destinatários recebem o convite por e-mail e o documento não pode mais ser alterado. Antes de chamar, confirme com a pessoa o título e quem vai assinar." },
+    enviar: { title: "Enviar envelope", description: "Envia um rascunho para assinatura: os destinatários recebem o convite por e-mail e o documento não pode mais ser alterado. Antes de chamar, confirme com a pessoa o título e quem vai assinar e, se não houver campos posicionados (o normal pelo MCP), avise que a assinatura aparece no manifesto ao final e num selo no rodapé de cada página, não sobre as linhas do documento." },
     lembrar: { title: "Lembrar signatários", description: `Manda um lembrete por e-mail a quem ainda não assinou (ou só ao e-mail informado). No máximo um lembrete a cada ${LEMBRETE_MANUAL_INTERVALO_H} horas por pessoa.` },
     cancelar: { title: "Cancelar envelope", description: "Cancela um envelope enviado. Quem ainda não assinou não vai mais conseguir. Não dá para desfazer: confirme com a pessoa antes." },
     link: { title: "Link do documento", description: `Gera um link de ${DOWNLOAD_URL_SEGUNDOS / 60} minutos para baixar o PDF original ou o assinado (versao "final", só depois de concluído).` },
@@ -338,6 +345,10 @@ export const copy = {
     attachFile: (url: string) => `Falta o PDF: a pessoa anexa aqui, e posiciona os campos se quiser: ${url}`,
     fileAttached: (paginas: number) => `PDF anexado e conferido (${paginas} ${paginas === 1 ? "página" : "páginas"}).`,
     notSent: "O envelope não foi enviado. Para enviar, use enviar_envelope depois de confirmar com a pessoa.",
+    // Emenda de 22/11/2026: sem campo de assinatura posicionado, avisar onde a assinatura aparece.
+    noVisibleSignature: (url: string) =>
+      `Sem campo de assinatura posicionado: a assinatura não aparece sobre as linhas do documento. Ela fica no manifesto anexado ao final e num selo no rodapé de cada página, e vale do mesmo jeito. Para a assinatura aparecer num lugar específico, a pessoa posiciona os campos antes de enviar: ${url}`,
+    sentWithoutField: "A assinatura vai aparecer no manifesto anexado ao final e num selo no rodapé de cada página (não sobre as linhas do documento).",
     sentNow: (titulo: string, n: number) => `Enviado: ${titulo}. ${n === 1 ? "1 convite saiu" : `${n} convites saíram`} por e-mail.`,
     reminded: (n: number) => (n === 0 ? "Ninguém recebeu lembrete agora (todos já receberam um nas últimas 24 horas, ou não há quem esteja aguardando)." : n === 1 ? "Lembrete enviado para 1 pessoa." : `Lembrete enviado para ${n} pessoas.`),
     canceled: (titulo: string) => `Cancelado: ${titulo}. Quem já tinha sido convidado foi avisado.`,

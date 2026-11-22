@@ -6,8 +6,11 @@
 // - desenhadas: a imagem PNG, preservando a proporção, centralizada;
 // - data, nome e texto: Helvetica 10 pt (menor se o campo for baixo), cortados em uma linha;
 // - caixa: ✓ desenhado em traços quando marcada, vazia quando não.
+// Selo de rodapé (emenda de 22/11/2026): quando alguém assinou sem campo de assinatura
+// posicionado, cada página do original ganha a linha "Assinado eletronicamente por … · Código …".
 import "server-only";
 import { degrees, rgb, type PDFDocument, type PDFImage, type PDFPage } from "pdf-lib";
+import { copy } from "@/lib/copy";
 import { CAMPO_TEXTO_PT } from "@/lib/limits";
 import { embedPngOnce, fitLine, safeText, type PdfFonts } from "./fonts";
 
@@ -114,5 +117,43 @@ export async function stampFields(doc: PDFDocument, fields: StampField[], marks:
       const text = fitLine(safeText(f.valor, fonts.regular), fonts.regular, size, frame.w - Math.min(4, frame.w / 5));
       drawLine(page, frame, text, fonts.regular, size, false);
     }
+  }
+}
+
+const FOOTER_INK = rgb(0.43, 0.43, 0.45); // #6e6e73, o cinza do manifesto
+const FOOTER_PT = 7;
+const FOOTER_BOTTOM_PT = 10; // distância da borda de baixo da área visível
+const FOOTER_SIDE = 0.04; // margem lateral, em fração da largura vista
+
+// Monta o texto do selo de rodapé (emenda de 22/11/2026, regra 11.9): os nomes de quem assinou,
+// trocados por "Ana e mais 2" e depois por "3 pessoas" se a linha não couber na página mais
+// estreita. Recebe: nomes, data já formatada, código formatado, "assina.app.br/verificar", a
+// fonte e a largura disponível. Devolve: a linha.
+export function signedFooterText(nomes: string[], data: string, codigo: string, verificar: string, font: PdfFonts["regular"], maxWidth: number): string {
+  const f = copy.manifest;
+  const options = [f.footerAnd(nomes), ...(nomes.length > 1 ? [f.footerOthers(nomes[0], nomes.length - 1), f.footerPeople(nomes.length)] : [])];
+  const lines = options.map((quem) => safeText(f.footer(quem, data, codigo, verificar), font));
+  const fits = lines.find((l) => font.widthOfTextAtSize(l, FOOTER_PT) <= maxWidth);
+  return fits ?? fitLine(lines[lines.length - 1], font, FOOTER_PT, maxWidth);
+}
+
+// Largura útil do rodapé de uma página como ela é vista (com /Rotate e CropBox).
+export function footerWidth(page: PDFPage): number {
+  return fieldFrame(page, { x: FOOTER_SIDE, y: 0, largura: 1 - 2 * FOOTER_SIDE, altura: 0.01 }).w;
+}
+
+// Desenha o selo de rodapé em todas as páginas do documento original (antes do manifesto),
+// centralizado no pé da página como ela é vista, em cinza 7 pt, sem fundo (não cobre o conteúdo).
+// Recebe: as páginas do original, a linha pronta (signedFooterText) e as fontes. Devolve: nada.
+export function stampSignedFooter(pages: PDFPage[], text: string, fonts: PdfFonts): void {
+  for (const page of pages) {
+    const probe = fieldFrame(page, { x: 0, y: 0, largura: 1, altura: 1 });
+    const viewH = probe.h;
+    const h = FOOTER_PT * 1.4;
+    const frame = fieldFrame(page, { x: FOOTER_SIDE, y: (viewH - FOOTER_BOTTOM_PT - h) / viewH, largura: 1 - 2 * FOOTER_SIDE, altura: h / viewH });
+    const line = fitLine(text, fonts.regular, FOOTER_PT, frame.w);
+    const width = fonts.regular.widthOfTextAtSize(line, FOOTER_PT);
+    const ly = frame.h / 2 - fonts.regular.heightAtSize(FOOTER_PT, { descender: false }) / 2;
+    page.drawText(line, { ...frame.at(Math.max(0, (frame.w - width) / 2), ly), size: FOOTER_PT, font: fonts.regular, color: FOOTER_INK, rotate: frame.rotate });
   }
 }

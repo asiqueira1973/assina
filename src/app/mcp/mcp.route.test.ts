@@ -179,6 +179,9 @@ describe("/mcp (seção 13.3)", () => {
     // Épico 8.14: o MCP também aceita exigir_nascimento.
     expect((await db().from("as_signatarios").select("exigir_nascimento").eq("envelope_id", id).single()).data).toEqual({ exigir_nascimento: true });
     expect(created.content[0].text).toContain("O envelope não foi enviado.");
+    // Emenda de 22/11/2026: o MCP não posiciona campos, então avisa onde a assinatura aparece.
+    expect(created.content[0].text).toContain("Sem campo de assinatura posicionado");
+    expect(created.structuredContent.envelope.assinatura_visivel_no_documento).toBe(false);
     expect(created.content[0].text).toContain(`/painel/envelopes/${id}/editar`);
     expect(outbox).toHaveLength(0);
     const { data: e } = await db().from("as_envelopes").select("status, origem").eq("id", id).single();
@@ -193,6 +196,8 @@ describe("/mcp (seção 13.3)", () => {
     const sent = await call(bearer, "enviar_envelope", { id: env });
     expect(sent.isError).toBeFalsy();
     expect(sent.structuredContent.envelope.status).toBe("enviado");
+    expect(sent.structuredContent.envelope.assinatura_visivel_no_documento).toBe(false);
+    expect(sent.content[0].text).toContain("selo no rodapé de cada página");
     const { data: ev } = await db().from("as_eventos").select("ator").eq("envelope_id", env).eq("tipo", "enviado").single();
     expect(ev!.ator).toBe("mcp");
 

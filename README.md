@@ -320,6 +320,8 @@ No Claude Code, o mesmo pode ser feito pela linha de comando: `claude mcp add --
 
 As ferramentas são `listar_envelopes`, `ver_envelope`, `criar_envelope` (só rascunho; nunca envia), `enviar_envelope` (o assistente confirma antes), `lembrar_signatarios`, `cancelar_envelope` e `link_do_documento`. O MCP não exclui envelope e não mexe na chave nem no webhook.
 
+O MCP não posiciona campos. Sem campo de assinatura, a assinatura não aparece sobre as linhas do documento: ela fica no manifesto anexado ao final e num selo no rodapé de cada página ("Assinado eletronicamente por … · Código …"), e vale do mesmo jeito. O assistente avisa isso ao criar e ao enviar. Para a assinatura aparecer num lugar específico, posicione os campos no editor do painel antes de enviar.
+
 <p align="center">
   <img src="docs/images/claude-conector.png" width="48%" alt="No Claude, a janela Add custom connector com o nome Assina e a URL https://assina.app.br/mcp">
   &nbsp;

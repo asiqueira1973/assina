@@ -95,6 +95,8 @@ describe("finalização (épico 8.6)", () => {
     expect(pages[0]).toContain("Diretora");
     expect(pages[0]).toContain("Ana Souza");
     expect(pages[0]).toMatch(/\d{2}\/\d{2}\/\d{4}/); // campo data, em Brasília
+    // Todos os assinantes têm campo de assinatura: sem selo de rodapé (emenda de 22/11/2026).
+    expect(pages[0]).not.toContain("Assinado eletronicamente por");
     const manifest = pages.slice(1).join(" ");
     if (process.env.MOSTRAR_MANIFESTO) console.log(pages.join("\n---\n"));
     for (const t of ["Manifesto de assinaturas", "Contrato", formatVerificationCode(e.codigo_verificacao), e.hash_original!, "Ana Souza", "Bruno Lima", "Carla Dias", "a***@f.dev", "***.982.247-**", "Autenticado por código enviado ao e-mail", "UTC-3", "Assinou", "Concordou em assinar eletronicamente", "Página 1 de"]) {
@@ -124,6 +126,28 @@ describe("finalização (épico 8.6)", () => {
     }
     expect(done.find((m) => m.to === conta!.email)!.text).toContain(`/painel/envelopes/${env.id}`);
     void ids;
+  });
+
+  it("assinante sem campo de assinatura: selo de rodapé em cada página do original, não no manifesto (emenda de 22/11/2026)", async () => {
+    const env = await sentEnvelope(accounts, [{ nome: "Ana Lima", email: "ana@rodape.dev" }, { nome: "Bruno Reis", email: "bruno@rodape.dev" }], {
+      pdf: await makePdf(2),
+      // Só o Bruno tem campo: a Ana assina "sem lugar" e o selo cita os dois.
+      campos: (ids) => [{ signatario_id: ids["bruno@rodape.dev"], tipo: "assinatura", pagina: 2, x: 0.5, y: 0.7, largura: 0.3, altura: 0.06 }],
+    });
+    await signAs(outbox, "ana@rodape.dev", { metodo: "digitada", assinatura_texto: "Ana Lima" });
+    expect(await signAs(outbox, "bruno@rodape.dev", { metodo: "digitada", assinatura_texto: "Bruno Reis" })).toBe("finalizando");
+    const e = await envelope(env.id);
+    expect(e.status).toBe("concluido");
+    const final = (await storage().read(e.arquivo_final_path!, 50 * 1024 * 1024))!;
+    expect(verifySeal(final)).toBe(true);
+    const pages = await pdfPagesText(final);
+    const codigo = formatVerificationCode(e.codigo_verificacao);
+    for (const page of pages.slice(0, 2)) {
+      expect(page).toContain("Assinado eletronicamente por Ana Lima e Bruno Reis em");
+      expect(page).toContain(`Código ${codigo}`);
+      expect(page).toMatch(/\/verificar/);
+    }
+    for (const page of pages.slice(2)) expect(page).not.toContain("Assinado eletronicamente por");
   });
 
   it("original alterado no armazenamento: integridade_violada, não conclui, alerta ao admin na hora", async () => {

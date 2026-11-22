@@ -44,6 +44,19 @@ async function guarded(fn: () => Promise<Result>): Promise<Result> {
 }
 
 const panelLink = (id: string) => `${siteOrigin()}/painel/envelopes/${id}`;
+const editorLink = (id: string) => `${siteOrigin()}/painel/envelopes/${id}/editar`;
+
+// Emenda de 22/11/2026: algum assinante do envelope está sem campo de assinatura posicionado?
+// (aí a assinatura dele aparece só no manifesto e no selo de rodapé). Recebe: o id. Devolve: sim/não.
+async function missingSignatureField(envelopeId: string): Promise<boolean> {
+  const [{ data: signers, error: sErr }, { data: fields, error: fErr }] = await Promise.all([
+    db().from("as_signatarios").select("id").eq("envelope_id", envelopeId).eq("papel", "assinar"),
+    db().from("as_campos").select("signatario_id").eq("envelope_id", envelopeId).eq("tipo", "assinatura"),
+  ]);
+  if (sErr || fErr) throw sErr ?? fErr;
+  const withField = new Set(fields!.map((f) => f.signatario_id));
+  return signers!.some((s) => !withField.has(s.id));
+}
 
 // Monta o servidor da requisição. Recebe: a conta e quem pediu. Devolve: o McpServer.
 export function buildMcpServer(account: Account, meta: RequestMeta): McpServer {
@@ -146,9 +159,11 @@ export function buildMcpServer(account: Account, meta: RequestMeta): McpServer {
         }
         const r = await createEnvelopeFromApi(contaId, parsed.data, null, meta, { origem: "mcp", ator: "mcp" });
         const lines = [T.draftCreated(r.envelope.titulo, r.envelope.id)];
-        lines.push(r.envelope.paginas ? T.fileAttached(r.envelope.paginas) : T.attachFile(`${siteOrigin()}/painel/envelopes/${r.envelope.id}/editar`));
+        lines.push(r.envelope.paginas ? T.fileAttached(r.envelope.paginas) : T.attachFile(editorLink(r.envelope.id)));
+        // O MCP nunca posiciona campos (regra 11.15): avisa onde a assinatura vai aparecer.
+        lines.push(T.noVisibleSignature(editorLink(r.envelope.id)));
         lines.push(T.notSent);
-        return ok(lines.join("\n"), { envelope: { id: r.envelope.id, titulo: r.envelope.titulo, status: r.envelope.status, paginas: r.envelope.paginas, enviado: false } });
+        return ok(lines.join("\n"), { envelope: { id: r.envelope.id, titulo: r.envelope.titulo, status: r.envelope.status, paginas: r.envelope.paginas, enviado: false, assinatura_visivel_no_documento: false } });
       }),
   );
 
@@ -158,7 +173,9 @@ export function buildMcpServer(account: Account, meta: RequestMeta): McpServer {
     ({ id }) =>
       guarded(async () => {
         const r = await sendEnvelope(contaId, id, { ator: "mcp", meta });
-        return ok(T.sentNow(r.envelope.titulo, r.invites.sent), { envelope: { id: r.envelope.id, status: r.envelope.status }, convites: r.invites });
+        const semCampo = await missingSignatureField(r.envelope.id);
+        const text = semCampo ? `${T.sentNow(r.envelope.titulo, r.invites.sent)}\n${T.sentWithoutField}` : T.sentNow(r.envelope.titulo, r.invites.sent);
+        return ok(text, { envelope: { id: r.envelope.id, status: r.envelope.status, assinatura_visivel_no_documento: !semCampo }, convites: r.invites });
       }),
   );
 

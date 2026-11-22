@@ -4,7 +4,8 @@
 //     finalização que cai ou estoura o tempo também conta — regra 11.10);
 //  2. lê o original e confere o SHA-256 contra hash_original (senão: 'integridade_violada',
 //     falha definitiva com alerta ao admin, e o envelope não conclui);
-//  3. grava os campos (11.3), anexa o manifesto (11.9) e sela (11.10, B-T ou B-B);
+//  3. grava os campos (11.3), o selo de rodapé quando falta campo de assinatura (emenda de
+//     22/11/2026), anexa o manifesto (11.9) e sela (11.10, B-T ou B-B);
 //  4. calcula o hash_final, sobe {conta}/{envelope}/final-{reserva}.pdf (caminho da tentativa: um
 //     finalizador atrasado nunca grava por cima do final de outro);
 //  5. as_fn_conclui_envelope: concluido, eventos finalizado e concluido, e-mails e webhook na
@@ -27,7 +28,9 @@ import { deliverEnvelopeWebhooks } from "@/server/webhooks/deliver";
 import { embedFonts } from "@/server/pdf/fonts";
 import { appendManifest, type ManifestData } from "@/server/pdf/manifest";
 import { sealCredentialsFromEnv, sealPdf } from "@/server/pdf/seal";
-import { stampFields, type SignerMarks, type StampField } from "@/server/pdf/stamp";
+import { footerWidth, signedFooterText, stampFields, stampSignedFooter, type SignerMarks, type StampField } from "@/server/pdf/stamp";
+import { formatDateShort } from "@/lib/format";
+import { formatVerificationCode } from "@/server/envelopes/verification-code";
 
 export type FinalizeResult = "concluido" | "falhou" | "ocupado";
 
@@ -121,6 +124,16 @@ async function buildFinal(envelopeId: string, reserva: string) {
     eventos: events!.map((ev) => ({ ocorrido_em: ev.ocorrido_em, tipo: ev.tipo as keyof typeof copy.events, quem: quem(ev), ip: ev.ip as string | null })),
     site: process.env.NEXT_PUBLIC_SITE_URL ?? "",
   };
+  // Selo de rodapé (emenda de 22/11/2026): se algum assinante não tem campo de assinatura no
+  // documento (envelope do MCP ou da API sem campos, ou campos só para outros), a assinatura dele
+  // não aparece no corpo; cada página do original ganha a linha com quem assinou e o código.
+  const withField = new Set(fields!.filter((f) => f.tipo === "assinatura").map((f) => f.signatario_id));
+  if (assinantes.some((s) => !withField.has(s.id))) {
+    const originalPages = doc.getPages();
+    const verificar = `${data.site.replace(/^https?:\/\//, "")}/verificar`;
+    const text = signedFooterText(assinantes.map((s) => s.nome), formatDateShort(concluidoEm), formatVerificationCode(e.codigo_verificacao), verificar, fonts.regular, Math.min(...originalPages.map(footerWidth)));
+    stampSignedFooter(originalPages, text, fonts);
+  }
   await appendManifest(doc, data, fonts);
 
   const { bytes, level } = await sealPdf(doc, sealCredentialsFromEnv(), process.env.SELO_TSA_URL);
