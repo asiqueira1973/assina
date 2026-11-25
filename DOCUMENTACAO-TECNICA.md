@@ -113,7 +113,7 @@ Os erros de negócio sobem com a mensagem igual ao código (`trilha_imutavel`, `
 
 | Tela / rota | Lê | Escreve | Passa por |
 |---|---|---|---|
-| `/` (público, página inicial) | — | — | o proxy manda quem tem sessão para `/painel` |
+| `/` (público, página inicial) | — | — | o proxy manda quem tem sessão para `/painel`; seção "A assinatura vale?" com `copy.home.validity` e o aviso `LEGAL_NEGATIVAS.homeNotice` |
 | `/privacidade`, `/termos` (públicos) | — | — | `LegalPage` com `copy.legal` |
 | `/robots.txt`, `/sitemap.xml` | — | — | `src/app/robots.ts`, `src/app/sitemap.ts` |
 | 404 geral (endereço que não existe) | — | — | `src/app/not-found.tsx`, no padrão das páginas públicas, com `copy.notFound` |

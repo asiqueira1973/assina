@@ -1,5 +1,6 @@
 // [Público] Página inicial — critério 8.12 e seção 15.1: o que é o Assina, "Entrar com Google",
-// "Verificar um documento", o aviso sobre atos que exigem ICP (LEGAL_NEGATIVAS) e o rodapé.
+// "Verificar um documento", a seção "A assinatura vale?" (com o aviso sobre atos que exigem ICP,
+// de LEGAL_NEGATIVAS) e o rodapé.
 // Quem tem sessão é mandado ao painel pelo proxy. Indexável (seção 17).
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -27,7 +28,17 @@ export default function HomePage() {
             <a className={styles.primary} href="/api/auth/google">{t.signIn}</a>
             <Link className={styles.secondary} href="/verificar">{t.verify}</Link>
           </div>
-          <p className={styles.notice}>{LEGAL_NEGATIVAS.homeNotice}</p>
+        </section>
+        {/* A assinatura vale? (25/11/2026): a validade em linguagem simples, com o aviso sobre ICP-Brasil. */}
+        <section className={styles.section} aria-labelledby="validade">
+          <h2 id="validade">{t.validityTitle}</h2>
+          {t.validity.map((p) => (
+            <p key={p}>{p}</p>
+          ))}
+          <p>{LEGAL_NEGATIVAS.homeNotice}</p>
+          <p>
+            <Link href="/termos">{t.validityTerms}</Link>
+          </p>
         </section>
       </div>
       <SiteFooter />

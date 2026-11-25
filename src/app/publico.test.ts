@@ -67,7 +67,7 @@ describe("textos legais e rodapé (seção 20)", () => {
   it("nenhum texto fora de LEGAL_NEGATIVAS usa as palavras proibidas (princípio 4)", () => {
     const negatives = new Set<string>(Object.values(LEGAL_NEGATIVAS));
     const all: string[] = [
-      ...Object.values(copy.home),
+      ...Object.values(copy.home).flat(),
       ...Object.values(copy.footer),
       ...[...copy.legal.termsSections, ...copy.legal.privacySections].flatMap((s) => [s.title, ...s.paragraphs]),
     ].filter((t) => !negatives.has(t));

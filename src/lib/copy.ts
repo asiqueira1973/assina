@@ -580,6 +580,14 @@ export const copy = {
     subtitle: "Suba um PDF, diga quem assina e receba de volta o documento assinado, com a trilha de auditoria. Grátis.",
     signIn: "Entrar com Google",
     verify: "Verificar um documento",
+    // Seção "A assinatura vale?" (pedido do Alexandre, 25/11/2026). O aviso de LEGAL_NEGATIVAS fecha a
+    // seção (homeNotice). A Lei 14.063/2020 fica para a revisão jurídica (P11).
+    validityTitle: "A assinatura vale?",
+    validity: [
+      "Sim, entre as partes que aceitam este meio. É uma assinatura eletrônica, nos termos do art. 10, § 2º, da Medida Provisória 2.200-2/2001.",
+      "Quem assina comprova o acesso ao próprio e-mail com um código de uso único. O PDF final traz o manifesto com cada assinatura e a trilha de auditoria, e qualquer pessoa confere a autenticidade do documento na verificação.",
+    ],
+    validityTerms: "Mais detalhes nos Termos de uso.",
   },
   // Rodapé das páginas públicas (seção 15.1): "Privacidade · Termos · Código aberto no GitHub · Um produto DabLab".
   footer: {
