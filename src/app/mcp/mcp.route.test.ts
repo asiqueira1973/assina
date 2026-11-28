@@ -260,18 +260,18 @@ describe("/mcp (seção 13.3)", () => {
     expect((await rpc(bearer, "tools/list")).res.status).toBe(401);
   });
 
-  it("pedido recusado pelo SDK (4xx) deixa no log o motivo, o método HTTP, o método JSON-RPC e a versão, sem e-mail nem token", async () => {
+  it("pedido recusado pelo SDK (4xx) deixa no log o motivo, o método HTTP, o método JSON-RPC, a versão e o user-agent, sem e-mail nem token", async () => {
     const a = await account();
     const key = generateApiKey();
     await db().from("as_credenciais").insert({ conta_id: a.id, tipo: "api", nome: "Chave de API", prefixo: key.prefix, valor_hash: key.hash, valor_cifrado: key.sealed });
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
-      const headers = { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2099-01-01", authorization: `Bearer ${key.value}` };
+      const headers = { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2099-01-01", authorization: `Bearer ${key.value}`, "user-agent": "Claude-User (claude.ai)" };
       const res = await mcp(new NextRequest(`${SITE}/mcp`, { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) }));
       expect(res.status).toBe(400);
       const logged = warn.mock.calls.filter((c) => c[0] === "mcp_rejeitado");
       expect(logged).toHaveLength(1);
-      expect(logged[0][1]).toEqual({ status: 400, http: "POST", rpc: "tools/list", versao: "2099-01-01", motivo: expect.stringContaining("Unsupported protocol version") });
+      expect(logged[0][1]).toEqual({ status: 400, http: "POST", rpc: "tools/list", versao: "2099-01-01", cliente: "Claude-User (claude.ai)", motivo: expect.stringContaining("Unsupported protocol version") });
       const text = JSON.stringify(warn.mock.calls);
       expect(text).not.toContain("@teste.dev");
       expect(text).not.toContain(key.value);
@@ -287,7 +287,7 @@ describe("/mcp (seção 13.3)", () => {
 });
 
 describe("assina_api_chamada no /mcp (seção 21)", () => {
-  it("conta só tools/call e pedido recusado; initialize, tools/list e notificações não contam", async () => {
+  it("conta só tools/call; initialize, tools/list, notificações e pedido recusado (a sondagem server/discover) não contam", async () => {
     // Uma chave por conta; a segunda conta dá outra credencial, fora da amostragem da primeira.
     const keys = [generateApiKey(), generateApiKey()];
     for (const key of keys) {
@@ -308,7 +308,7 @@ describe("assina_api_chamada no /mcp (seção 21)", () => {
 
       // Uso de ferramenta conta.
       expect(await call(keys[0].value, "listar_envelopes", {})).toBeDefined();
-      // Pedido recusado também conta.
+      // Pedido recusado não conta (fica no log mcp_rejeitado).
       const headers = { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2099-01-01", authorization: `Bearer ${keys[1].value}` };
       expect((await mcp(new NextRequest(`${SITE}/mcp`, { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) }))).status).toBe(400);
       await flushAnalytics();
@@ -318,7 +318,6 @@ describe("assina_api_chamada no /mcp (seção 21)", () => {
     }
     expect(events.filter((e) => e.nome === "assina_api_chamada").map((e) => e.propriedades)).toEqual([
       { rota: "/mcp", status: 200 },
-      { rota: "/mcp", status: 400 },
     ]);
   });
 });
