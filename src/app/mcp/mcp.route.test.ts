@@ -288,9 +288,10 @@ describe("/mcp (seção 13.3)", () => {
 
 describe("assina_api_chamada no /mcp (seção 21)", () => {
   it("conta só tools/call e pedido recusado; initialize, tools/list e notificações não contam", async () => {
-    const a = await account();
+    // Uma chave por conta; a segunda conta dá outra credencial, fora da amostragem da primeira.
     const keys = [generateApiKey(), generateApiKey()];
     for (const key of keys) {
+      const a = await account();
       await db().from("as_credenciais").insert({ conta_id: a.id, tipo: "api", nome: "Chave de API", prefixo: key.prefix, valor_hash: key.hash, valor_cifrado: key.sealed });
     }
     const events: IngestEvent[] = [];
@@ -307,7 +308,7 @@ describe("assina_api_chamada no /mcp (seção 21)", () => {
 
       // Uso de ferramenta conta.
       expect(await call(keys[0].value, "listar_envelopes", {})).toBeDefined();
-      // Pedido recusado também conta (com a outra chave, fora da amostragem da primeira).
+      // Pedido recusado também conta.
       const headers = { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2099-01-01", authorization: `Bearer ${keys[1].value}` };
       expect((await mcp(new NextRequest(`${SITE}/mcp`, { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) }))).status).toBe(400);
       await flushAnalytics();

@@ -62,11 +62,16 @@ async function handle(req: NextRequest): Promise<Response> {
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   await server.connect(transport);
   // O clone vem antes do SDK, que consome o corpo; GET e DELETE não têm corpo.
-  const body = req.method === "POST" ? req.clone().text() : Promise.resolve("");
+  const bodyPromise = req.method === "POST" ? req.clone().text() : Promise.resolve("");
   try {
     const res = await transport.handleRequest(req);
-    if (res.status >= 400) await logRejected(req, await body.catch(() => ""), res);
-    trackApiCall({ credentialId: auth.credentialId, email: auth.account.email }, "/mcp", res.status);
+    const body = await bodyPromise.catch(() => "");
+    if (res.status >= 400) await logRejected(req, body, res);
+    // Seção 21: só uso de ferramenta ou pedido recusado. A conexão do cliente (initialize,
+    // tools/list, notificações), que o Claude refaz a cada conversa aberta, não é uso.
+    if (rpcMethod(body) === "tools/call" || res.status >= 400) {
+      trackApiCall({ credentialId: auth.credentialId, email: auth.account.email }, "/mcp", res.status);
+    }
     return withCors(res);
   } finally {
     await server.close();
