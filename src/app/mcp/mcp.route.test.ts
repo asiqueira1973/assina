@@ -4,6 +4,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { NextRequest } from "next/server";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { flushAnalytics, setAnalyticsSinkForTests, type IngestEvent } from "@/server/analytics/client";
 import { generateApiKey } from "@/server/credentials/api-key";
 import { db } from "@/server/db/client";
 import { setMailerForTests, type EmailMessage } from "@/server/email/mailer";
@@ -282,6 +283,42 @@ describe("/mcp (seção 13.3)", () => {
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+describe("assina_api_chamada no /mcp (seção 21)", () => {
+  it("conta só tools/call e pedido recusado; initialize, tools/list e notificações não contam", async () => {
+    const a = await account();
+    const keys = [generateApiKey(), generateApiKey()];
+    for (const key of keys) {
+      await db().from("as_credenciais").insert({ conta_id: a.id, tipo: "api", nome: "Chave de API", prefixo: key.prefix, valor_hash: key.hash, valor_cifrado: key.sealed });
+    }
+    const events: IngestEvent[] = [];
+    setAnalyticsSinkForTests((e) => events.push(e));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      // Conexão do cliente: nada conta (nem abre a janela de amostragem da credencial).
+      expect((await rpc(keys[0].value, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "c", version: "1" } })).res.status).toBe(200);
+      expect((await rpc(keys[0].value, "tools/list")).res.status).toBe(200);
+      const note = await mcp(new NextRequest(`${SITE}/mcp`, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${keys[0].value}` }, body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) }));
+      expect(note.status).toBe(202);
+      await flushAnalytics();
+      expect(events.filter((e) => e.nome === "assina_api_chamada")).toEqual([]);
+
+      // Uso de ferramenta conta.
+      expect(await call(keys[0].value, "listar_envelopes", {})).toBeDefined();
+      // Pedido recusado também conta (com a outra chave, fora da amostragem da primeira).
+      const headers = { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2099-01-01", authorization: `Bearer ${keys[1].value}` };
+      expect((await mcp(new NextRequest(`${SITE}/mcp`, { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) }))).status).toBe(400);
+      await flushAnalytics();
+    } finally {
+      setAnalyticsSinkForTests(null);
+      warn.mockRestore();
+    }
+    expect(events.filter((e) => e.nome === "assina_api_chamada").map((e) => e.propriedades)).toEqual([
+      { rota: "/mcp", status: 200 },
+      { rota: "/mcp", status: 400 },
+    ]);
   });
 });
 
