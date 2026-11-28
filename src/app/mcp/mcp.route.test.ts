@@ -3,7 +3,7 @@
 // ferramentas da 13.3 com ator "mcp", criar nunca envia, chave de API também vale, revogar).
 import { createHash, randomBytes } from "node:crypto";
 import { NextRequest } from "next/server";
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { generateApiKey } from "@/server/credentials/api-key";
 import { db } from "@/server/db/client";
 import { setMailerForTests, type EmailMessage } from "@/server/email/mailer";
@@ -257,6 +257,31 @@ describe("/mcp (seção 13.3)", () => {
     const r = await revoke(apiRequest("/x", { method: "POST", cookie: a.cookie }), { params: Promise.resolve({ id: view.connections[0].id }) });
     expect(r.status).toBe(200);
     expect((await rpc(bearer, "tools/list")).res.status).toBe(401);
+  });
+
+  it("pedido recusado pelo SDK (4xx) deixa no log o motivo, o método HTTP, o método JSON-RPC e a versão, sem e-mail nem token", async () => {
+    const a = await account();
+    const key = generateApiKey();
+    await db().from("as_credenciais").insert({ conta_id: a.id, tipo: "api", nome: "Chave de API", prefixo: key.prefix, valor_hash: key.hash, valor_cifrado: key.sealed });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const headers = { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2099-01-01", authorization: `Bearer ${key.value}` };
+      const res = await mcp(new NextRequest(`${SITE}/mcp`, { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) }));
+      expect(res.status).toBe(400);
+      const logged = warn.mock.calls.filter((c) => c[0] === "mcp_rejeitado");
+      expect(logged).toHaveLength(1);
+      expect(logged[0][1]).toEqual({ status: 400, http: "POST", rpc: "tools/list", versao: "2099-01-01", motivo: expect.stringContaining("Unsupported protocol version") });
+      const text = JSON.stringify(warn.mock.calls);
+      expect(text).not.toContain("@teste.dev");
+      expect(text).not.toContain(key.value);
+
+      // Pedido aceito não loga nada.
+      warn.mockClear();
+      expect((await rpc(key.value, "tools/list")).res.status).toBe(200);
+      expect(warn.mock.calls.filter((c) => c[0] === "mcp_rejeitado")).toHaveLength(0);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 
