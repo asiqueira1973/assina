@@ -11,6 +11,12 @@ Itens que dependem do Alexandre (conta, console, decisão) ou de um passo que n�
 | P9 | **Conectar de verdade ao ChatGPT** (o Claude já foi: 20/11/2026, conector em claude.ai, OAuth, listar, ver e criar rascunho em produção, prints no README) | O ChatGPT pede o modo desenvolvedor ligado na conta | README, seção "MCP: conectar ao Claude e ao ChatGPT". Conferir que a conexão aparece em Integrações e que "Revogar" corta a próxima chamada | Critério 8.10 em produção (`plans/8.10-mcp-oauth.md`) |
 | P11 | **Revisão jurídica dos Termos de uso e da Política de privacidade** (`copy.legal` e `LEGAL_NEGATIVAS` em `src/lib/copy.ts`) | Os textos foram escritos no 8.12 seguindo a seção 20 e o modelo do Reunião, em nome da DabLab, mas sem advogado. Conferir também a assunção 24.12 (redação do CPC, art. 784, § 4º) antes de citá-lo; os textos de hoje não o citam. Incluir na revisão: a seção "A assinatura vale?" da página inicial (25/11/2026) e se vale citar a Lei 14.063/2020 (assinatura simples, avançada e qualificada), deixada de fora de propósito | Mandar `/termos` e `/privacidade` para revisão; as mudanças entram em `copy.ts` (e, se for o caso, a data em `copy.legal.updated`) | Lançamento público (`plans/8.12-inicio-legais-protecoes.md`) |
 
+## Técnicas
+
+| # | O quê | Por que está parado | Como resolver | Bloqueia |
+|---|---|---|---|---|
+| P13 | **Migrar o `/mcp` para o SDK v2 do MCP** (`@modelcontextprotocol/server`, 2.4.0 em 28/11/2026), que fala a versão 2026-07-28 do protocolo | O `@modelcontextprotocol/sdk` 1.x parou em 2025-11-25 e não vai ganhar a versão nova. Hoje o Claude sonda com `server/discover` (2026-07-28), leva 400 e volta ao `initialize` de 2025, que funciona (decisão 63 da documentação técnica). Se um dia o Claude deixar de falar 2025, o conector para | Plano em `plans/`: trocar o pacote, ajustar `src/app/mcp/route.ts` e `src/server/mcp/tools.ts`, responder `server/discover`, manter os testes de `mcp.route.test.ts` e conferir no log que `mcp_rejeitado` some | Nada hoje; é prevenção |
+
 ## Decisões abertas do spec (seção 25)
 - 25.4 em parte: o lançamento é aberto (20/11/2026). Falta decidir o plano pago do Resend: o grátis manda 100 e-mails por dia, cerca de 10 envelopes de 3 assinantes (risco 23.2).
 - 25.5 Como uma conta chega aos níveis 2 e 3.

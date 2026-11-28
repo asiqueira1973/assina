@@ -35,7 +35,7 @@ function rpcMethod(body: string): string | null {
 
 // Loga o pedido que o SDK recusou (4xx), para achar a causa nos logs da Vercel. Recebe: a
 // requisição, o corpo em texto e a resposta. Só a mensagem fixa do SDK, sem `data` (que pode
-// trazer trecho do corpo); nunca e-mail nem token.
+// trazer trecho do corpo), e o user-agent; nunca e-mail nem token.
 async function logRejected(req: NextRequest, body: string, res: Response): Promise<void> {
   let motivo: string | null = null;
   try {
@@ -49,6 +49,8 @@ async function logRejected(req: NextRequest, body: string, res: Response): Promi
     http: req.method,
     rpc: rpcMethod(body),
     versao: req.headers.get("mcp-protocol-version")?.slice(0, 40) ?? null,
+    // Identifica o cliente (Claude desktop, claude.ai, celular, Claude Code); não é dado pessoal.
+    cliente: req.headers.get("user-agent")?.slice(0, 120) ?? null,
     motivo,
   });
 }
@@ -67,9 +69,10 @@ async function handle(req: NextRequest): Promise<Response> {
     const res = await transport.handleRequest(req);
     const body = await bodyPromise.catch(() => "");
     if (res.status >= 400) await logRejected(req, body, res);
-    // Seção 21: só uso de ferramenta ou pedido recusado. A conexão do cliente (initialize,
-    // tools/list, notificações), que o Claude refaz a cada conversa aberta, não é uso.
-    if (rpcMethod(body) === "tools/call" || res.status >= 400) {
+    // Seção 21: só uso de ferramenta. A conexão do cliente (initialize, tools/list, notificações)
+    // e a sondagem `server/discover` da versão 2026-07-28 do MCP, que o SDK 1.x recusa com 400,
+    // se repetem sempre que um Claude com o conector abre ou reconecta; não são uso.
+    if (rpcMethod(body) === "tools/call") {
       trackApiCall({ credentialId: auth.credentialId, email: auth.account.email }, "/mcp", res.status);
     }
     return withCors(res);
